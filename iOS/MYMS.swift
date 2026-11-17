@@ -273,59 +273,197 @@ final class Accounts: ObservableObject {
 
 struct LoginScreen: View {
     @ObservedObject var accounts: Accounts
-    @State private var registering = false
-    @State private var ageGroup: AgeGroup?
     @State private var email = ""
     @State private var password = ""
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Image(systemName: "figure.strengthtraining.traditional").font(.largeTitle)
-                        Text("MYMS").font(.largeTitle.bold())
-                        Text("운동 계획과 기록을 이 기기에 저장합니다.").font(.subheadline)
-                    }
-                    .padding(.vertical, 14)
-                    .foregroundStyle(.white)
-                    .listRowBackground(Color(red: 0.05, green: 0.29, blue: 0.22))
+            AccountPage(title: "로그인", subtitle: "MYMS 운동 계획과 기록을 이어서 확인하세요.") {
+                AccountEmailField(email: $email)
+                    .submitLabel(.next)
+                AccountField(title: "비밀번호") {
+                    SecureField("비밀번호 입력", text: $password)
+                        .accessibilityLabel("비밀번호")
+                        .textContentType(.password)
+                        .submitLabel(.go)
+                        .onSubmit(signIn)
                 }
-                Section {
-                    TextField("이메일", text: $email)
-                        .keyboardType(.emailAddress)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("비밀번호", text: $password)
-                        .textContentType(registering ? .newPassword : .password)
-                    if registering {
-                        AgeGroupPicker(selection: $ageGroup)
-                    }
-                } footer: {
-                    if let message = accounts.message { Text(message).foregroundStyle(.red) }
-                    else if registering { Text("비밀번호는 8자 이상으로 설정하세요.") }
+                if let message = accounts.message {
+                    Text(message).font(.footnote).foregroundStyle(.red)
                 }
-                Section {
-                    Button(registering ? "회원가입" : "로그인") {
-                        if registering {
-                            guard let ageGroup else { return }
-                            accounts.register(email: email, password: password, ageGroup: ageGroup)
-                        } else {
-                            accounts.signIn(email: email, password: password)
-                        }
-                    }
-                    .disabled(email.isEmpty || password.isEmpty || (registering && ageGroup == nil))
-                    Button(registering ? "로그인으로 돌아가기" : "새 계정 만들기") {
-                        registering.toggle()
-                        password = ""
-                        accounts.message = nil
-                    }
+                Button(action: signIn) {
+                    Text("로그인").frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(email.isEmpty || password.isEmpty)
+
+                HStack(spacing: 6) {
+                    Text("처음 이용하시나요?").foregroundStyle(.secondary)
+                    NavigationLink("회원가입") { RegistrationScreen(accounts: accounts) }
+                        .fontWeight(.semibold)
+                }
+                .font(.subheadline)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
             }
-            .navigationTitle(registering ? "회원가입" : "로그인")
-            .tint(Color(red: 0.16, green: 0.62, blue: 0.42))
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { accounts.message = nil }
         }
+    }
+
+    private func signIn() {
+        guard !email.isEmpty, !password.isEmpty else { return }
+        accounts.signIn(email: email, password: password)
+    }
+}
+
+struct RegistrationScreen: View {
+    @ObservedObject var accounts: Accounts
+    @State private var email = ""
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var ageGroup: AgeGroup?
+
+    private var passwordsDiffer: Bool {
+        !confirmation.isEmpty && confirmation != password
+    }
+
+    var body: some View {
+        AccountPage(title: "회원가입", subtitle: "계정을 만들고 운동 추천에 사용할 연령대를 선택하세요.") {
+            AccountEmailField(email: $email)
+            AccountField(title: "비밀번호") {
+                SecureField("8자 이상", text: $password)
+                    .accessibilityLabel("비밀번호")
+                    .textContentType(.newPassword)
+            }
+            AccountField(title: "비밀번호 확인") {
+                SecureField("비밀번호 다시 입력", text: $confirmation)
+                    .accessibilityLabel("비밀번호 확인")
+                    .textContentType(.newPassword)
+            }
+            AccountField(title: "연령대") {
+                AgeGroupPicker(selection: $ageGroup)
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+            }
+            if passwordsDiffer {
+                Text("비밀번호가 일치하지 않습니다.").font(.footnote).foregroundStyle(.red)
+            } else if let message = accounts.message {
+                Text(message).font(.footnote).foregroundStyle(.red)
+            }
+            Button {
+                guard let ageGroup, password == confirmation else { return }
+                accounts.register(email: email, password: password, ageGroup: ageGroup)
+            } label: {
+                Text("계정 만들기").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(email.isEmpty || password.count < 8 || password != confirmation || ageGroup == nil)
+
+            Text("계정과 운동 데이터는 이 기기에 저장됩니다.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { accounts.message = nil }
+    }
+}
+
+private struct AccountEmailField: View {
+    @Binding var email: String
+
+    var body: some View {
+        AccountField(title: "이메일") {
+            TextField("name@example.com", text: $email)
+                .accessibilityLabel("이메일")
+                .keyboardType(.emailAddress)
+                .textContentType(.username)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        }
+    }
+}
+
+private struct AccountField<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title).font(.subheadline.weight(.semibold)).accessibilityHidden(true)
+            content
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(Color(uiColor: .systemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+}
+
+private struct AccountPage<Content: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder var content: Content
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        GeometryReader { geometry in
+            let wide = geometry.size.width >= 850 && !typeSize.isAccessibilitySize
+            let inset: CGFloat = wide ? 32 : 20
+            let contentWidth = min(wide ? 940 : 480, max(0, geometry.size.width - inset * 2))
+            let panelWidth = wide ? (contentWidth - 24) / 2 : contentWidth
+            let layout = wide
+                ? AnyLayout(HStackLayout(alignment: .center, spacing: 24))
+                : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+
+            ScrollView {
+                layout {
+                    introduction.frame(width: panelWidth)
+                    form.frame(width: panelWidth)
+                }
+                .padding(inset)
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            }
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+        .tint(Color(red: 0.05, green: 0.40, blue: 0.29))
+    }
+
+    private var introduction: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("MYMS", systemImage: "figure.strengthtraining.traditional")
+                .font(.headline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                Text(subtitle)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(28)
+        .foregroundStyle(.white)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.03, green: 0.23, blue: 0.19),
+                         Color(red: 0.06, green: 0.40, blue: 0.29)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 24)
+        )
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            content
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -345,6 +483,8 @@ struct MYMSApp: App {
 }
 
 struct WorkoutHome: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .largeTitle) private var repFontSize = 68.0
     @StateObject private var coach = Coach()
     @StateObject private var store: WorkoutStore
     let account: LocalAccount
@@ -511,48 +651,134 @@ struct WorkoutHome: View {
 
     private var session: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Label(coach.connection, systemImage: coach.connected ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
-                        .font(.subheadline.weight(.medium))
-                    VStack(spacing: 8) {
-                        Text(coach.workout.exercise.rawValue).font(.title2.bold())
-                        Text("\(coach.workout.level.title) · 세트 \(coach.set) / \(coach.workout.sets)")
-                        Text("\(coach.reps) / \(coach.workout.target)")
-                            .font(.system(size: 68, weight: .bold, design: .rounded))
-                            .minimumScaleFactor(0.5).lineLimit(1).monospacedDigit()
-                            .accessibilityLabel("\(coach.workout.target)회 중 \(coach.reps)회")
-                        ProgressView(value: Double(coach.reps), total: Double(coach.workout.target)).tint(.mint)
-                        Text(coach.phase.rawValue).font(.headline)
-                        if coach.phase == .resting {
-                            Text("남은 휴식 \(coach.restSeconds)초").monospacedDigit()
+            GeometryReader { geometry in
+                let wide = geometry.size.width >= 780 && !typeSize.isAccessibilitySize
+                let inset: CGFloat = wide ? 28 : 16
+                let width = min(wide ? 960 : 540, max(0, geometry.size.width - inset * 2))
+                let panelWidth = wide ? (width - 20) / 2 : width
+                let layout = wide
+                    ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+                    : AnyLayout(VStackLayout(spacing: 16))
+
+                ScrollView {
+                    layout {
+                        sensorPanel.frame(width: panelWidth)
+                        VStack(spacing: 16) {
+                            progressPanel
+                            sessionControls
+                            sessionResult
                         }
-                        if coach.shallow {
-                            Text("동작 범위를 조금 더 늘려 보세요").foregroundStyle(.yellow)
-                        }
+                        .frame(width: panelWidth)
                     }
-                    .padding(24)
-                    .foregroundStyle(.white)
-                    .background(Color(red: 0.05, green: 0.29, blue: 0.22), in: RoundedRectangle(cornerRadius: 24))
-                    switch coach.phase {
-                    case .ready, .finished:
-                        Button("운동 시작") { coach.gesture(4) }.disabled(!coach.connected)
-                    case .calibrating, .training:
-                        Button("일시정지") { coach.pause() }
-                    case .paused:
-                        Button("재개") { coach.gesture(4) }.disabled(!coach.connected)
-                        Button("운동 종료") { coach.finish() }
-                    case .resting:
-                        Button("다음 세트") { coach.gesture(1) }.disabled(!coach.connected)
-                        Button("운동 종료") { coach.finish() }
-                    }
+                    .padding(inset)
+                    .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding()
             }
             .navigationTitle("운동")
         }
+    }
+
+    private var sensorPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if coach.canSelect || coach.isSimulating {
+                Toggle("센서 없이 시연", isOn: Binding(
+                    get: { coach.isSimulating },
+                    set: { coach.setSimulation($0) }
+                ))
+                .disabled(!coach.canSelect)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(coach.isSimulating ? "시연 모드 · 가상 센서" : coach.connection,
+                      systemImage: coach.isSimulating ? "waveform" : "antenna.radiowaves.left.and.right")
+                    .font(.headline)
+                if let millimeters = coach.latestDistance {
+                    Text("\((millimeters / 10).formatted(.number.precision(.fractionLength(1)))) cm")
+                        .font(.title2.monospacedDigit())
+                } else {
+                    Text(coach.connected ? "유효 거리값 대기 중" : "센서 데이터 대기 중")
+                        .foregroundStyle(.secondary)
+                }
+                if coach.isSimulating {
+                    Text("시연 기록과 포인트는 저장되지 않습니다.")
+                        .foregroundStyle(.secondary)
+                } else if coach.canSelect {
+                    Text(coach.workout.exercise.placement).foregroundStyle(.secondary)
+                } else if coach.phase == .training && coach.latestDistance == nil {
+                    Text("측정 일시 중지").foregroundStyle(.orange)
+                }
+                if coach.phase == .calibrating {
+                    ProgressView(value: coach.calibrationProgress)
+                        .accessibilityLabel("시작 거리 측정 진행률")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private var progressPanel: some View {
+        VStack(spacing: 8) {
+            Text(coach.workout.exercise.rawValue).font(.title2.bold())
+            Text("\(coach.workout.level.title) · 세트 \(coach.set) / \(coach.workout.sets)")
+            Text("\(coach.reps) / \(coach.workout.target)")
+                .font(.system(size: repFontSize, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.5).lineLimit(1).monospacedDigit()
+                .accessibilityLabel("\(coach.workout.target)회 중 \(coach.reps)회")
+            ProgressView(value: Double(coach.reps), total: Double(coach.workout.target)).tint(.mint)
+            Text(coach.phase.rawValue).font(.headline)
+            if coach.phase == .resting {
+                Text("남은 휴식 \(coach.restSeconds)초").monospacedDigit()
+            }
+            if coach.shallow {
+                Text("동작 범위를 조금 더 늘려 보세요").foregroundStyle(.yellow)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .foregroundStyle(.white)
+        .background(Color(red: 0.05, green: 0.29, blue: 0.22), in: RoundedRectangle(cornerRadius: 24))
+    }
+
+    @ViewBuilder
+    private var sessionResult: some View {
+        if coach.phase == .finished, let summary = coach.summary {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(coach.isSimulating ? "시연 결과" : "운동 결과").font(.headline)
+                LabeledContent("유효 횟수", value: "\(summary.reps)회")
+                LabeledContent("완료 세트", value: "\(summary.sets) / \(summary.workout.sets)")
+                LabeledContent("경과 시간", value: "\(summary.seconds)초")
+                if let saved = store.records.first(where: { $0.id == summary.id }) {
+                    LabeledContent("획득 포인트", value: "\(saved.points) P")
+                }
+            }
+            .padding(16)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private var sessionControls: some View {
+        VStack(spacing: 12) {
+            if coach.isSimulating && coach.phase == .training {
+                Button("가상 동작 1회") { coach.simulateRep() }
+                    .disabled(coach.isSimulatingRep)
+            }
+            switch coach.phase {
+            case .ready, .finished:
+                Button("운동 시작") { coach.gesture(4) }.disabled(!coach.canMeasure)
+            case .calibrating, .training:
+                Button("일시정지") { coach.pause() }
+            case .paused:
+                Button("재개") { coach.gesture(4) }.disabled(!coach.canMeasure)
+                Button("운동 종료") { coach.finish() }
+            case .resting:
+                Button("다음 세트") { coach.gesture(1) }.disabled(!coach.canMeasure)
+                Button("운동 종료") { coach.finish() }
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
     }
 
     private var history: some View {
@@ -611,6 +837,115 @@ struct WorkoutHome: View {
     }
 }
 
+private struct ExerciseAnimation: View {
+    let exercise: Exercise
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var startedAt: Date?
+    @State private var elapsed = 0.0
+
+    private let cycle = 3.2
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: startedAt == nil)) { timeline in
+                let motion = elapsed + (startedAt.map { max(0, timeline.date.timeIntervalSince($0)) } ?? 0)
+                let phase = (1 - cos(motion / cycle * 2 * .pi)) / 2
+                illustration(phase: phase)
+                    .overlay(alignment: .bottomLeading) {
+                        Text(phase < 0.5 ? "시작 자세" : (exercise == .pushup || exercise == .squat ? "내린 자세" : "들어 올린 자세"))
+                            .font(.caption.weight(.semibold))
+                            .padding(8)
+                    }
+                    .accessibilityHidden(true)
+            }
+            HStack {
+                Button {
+                    if let startedAt {
+                        elapsed = (elapsed + Date().timeIntervalSince(startedAt)).truncatingRemainder(dividingBy: cycle)
+                        self.startedAt = nil
+                    } else {
+                        startedAt = Date()
+                    }
+                } label: {
+                    Label(startedAt == nil ? "재생" : "일시정지",
+                          systemImage: startedAt == nil ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+                Button("자세 전환") {
+                    startedAt = nil
+                    elapsed = elapsed < cycle / 4 ? cycle / 2 : 0
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .onAppear {
+            if !reduceMotion { startedAt = Date() }
+        }
+        .onDisappear { startedAt = nil }
+    }
+
+    private func illustration(phase: Double) -> some View {
+        let poses = exercise.demonstration
+        return Canvas { context, size in
+            let scale = min(size.width / 100, size.height / 76)
+            func point(_ x: Double, _ y: Double) -> CGPoint {
+                CGPoint(x: (size.width - 100 * scale) / 2 + x * scale,
+                        y: (size.height - 76 * scale) / 2 + y * scale)
+            }
+            func joint(_ index: Int) -> CGPoint {
+                let a = poses.start[index]
+                let b = poses.end[index]
+                return point(a.x + (b.x - a.x) * phase, a.y + (b.y - a.y) * phase)
+            }
+            func line(_ points: [CGPoint], color: Color, width: Double) {
+                var path = Path()
+                path.addLines(points)
+                context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+            }
+            let ink = Color(red: 0.06, green: 0.32, blue: 0.25)
+            line([point(9, 64), point(91, 64)], color: ink.opacity(0.22), width: 2)
+            if exercise == .kneeRaise {
+                line([point(36, 44), point(57, 44), point(57, 63)], color: ink.opacity(0.35), width: 3)
+                line([point(36, 44), point(36, 63)], color: ink.opacity(0.35), width: 3)
+                line([joint(2), point(63, 47), point(64, 62)], color: ink.opacity(0.35), width: 4)
+            }
+            line([joint(0), joint(1), joint(2), joint(3), joint(4)], color: ink, width: 5)
+            line([joint(1), joint(5), joint(6)], color: ink, width: 4)
+            let head = joint(0)
+            let radius = 5.2 * scale
+            context.fill(Path(ellipseIn: CGRect(x: head.x - radius, y: head.y - radius,
+                                                width: radius * 2, height: radius * 2)), with: .color(ink))
+        }
+        .frame(height: 200)
+        .background(Color(red: 0.90, green: 0.96, blue: 0.93), in: RoundedRectangle(cornerRadius: 16))
+        .foregroundStyle(Color(red: 0.06, green: 0.32, blue: 0.25))
+    }
+}
+
+private extension Exercise {
+    // Joint order is head, shoulder, hip, knee, foot, elbow, hand.
+    var demonstration: (start: [CGPoint], end: [CGPoint]) {
+        let positions: ([(Double, Double)], [(Double, Double)])
+        switch self {
+        case .pushup:
+            positions = ([(75, 24), (64, 32), (42, 45), (28, 54), (14, 63), (67, 48), (68, 63)],
+                         [(78, 46), (66, 50), (43, 54), (28, 58), (14, 63), (56, 57), (68, 63)])
+        case .squat:
+            positions = ([(49, 10), (49, 20), (48, 37), (49, 50), (49, 63), (55, 29), (61, 34)],
+                         [(57, 23), (51, 32), (39, 47), (55, 50), (49, 63), (61, 31), (72, 28)])
+        case .bridge:
+            positions = ([(20, 59), (29, 60), (50, 61), (64, 43), (75, 63), (39, 63), (52, 63)],
+                         [(20, 59), (29, 60), (49, 46), (64, 38), (75, 63), (39, 63), (52, 63)])
+        case .kneeRaise:
+            positions = ([(43, 12), (44, 23), (45, 43), (64, 45), (67, 63), (49, 35), (57, 41)],
+                         [(43, 12), (44, 23), (45, 43), (64, 32), (73, 49), (47, 34), (57, 41)])
+        }
+        return (positions.0.map { CGPoint(x: $0.0, y: $0.1) },
+                positions.1.map { CGPoint(x: $0.0, y: $0.1) })
+    }
+}
+
 struct ExerciseGuide: View {
     @Environment(\.dismiss) private var dismiss
     let plan: Workout
@@ -633,6 +968,7 @@ struct ExerciseGuide: View {
                     .listRowBackground(Color(red: 0.05, green: 0.29, blue: 0.22))
                 }
                 Section("운동 방법") {
+                    ExerciseAnimation(exercise: plan.exercise)
                     ForEach(plan.exercise.steps.indices, id: \.self) { index in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text("\(index + 1)").font(.headline.monospacedDigit()).foregroundStyle(.tint)
@@ -772,6 +1108,56 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     @Published private(set) var shallow = false
     @Published private(set) var workout = Workout()
     @Published private(set) var result: WorkoutRecord?
+    @Published private(set) var summary: WorkoutRecord?
+    @Published private(set) var latestDistance: Double?
+    @Published private(set) var calibrationProgress = 0.0
+    @Published private(set) var isSimulating = false
+    @Published private(set) var isSimulatingRep = false
+    private var simulationTimer: Timer?
+    private var simulationSample = 0
+    private var lastLiveSample: TimeInterval?
+    private var distanceTimer: Timer?
+
+    var canMeasure: Bool { latestDistance != nil && (isSimulating || connected) }
+
+    func setSimulation(_ enabled: Bool) {
+        guard canSelect, enabled != isSimulating else { return }
+        isSimulating = enabled
+        phase = .ready
+        reps = 0
+        set = 1
+        summary = nil
+        resetMotion()
+        latestDistance = nil
+        if enabled {
+            measure(400)
+            simulationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                self?.feedSimulation()
+            }
+        } else {
+            simulationTimer?.invalidate()
+            simulationTimer = nil
+        }
+    }
+
+    func simulateRep() {
+        guard isSimulating, phase == .training, !isSimulatingRep else { return }
+        simulationSample = 0
+        isSimulatingRep = true
+    }
+
+    private func feedSimulation() {
+        guard isSimulating else { return }
+        if isSimulatingRep && phase == .training {
+            simulationSample += 1
+            let depth = workout.exercise.depth(for: workout.level) + 0.05
+            measure(simulationSample <= 8 ? 400 * (1 - depth) : 400)
+            if simulationSample >= 12 { isSimulatingRep = false }
+        } else {
+            isSimulatingRep = false
+            measure(400)
+        }
+    }
     private var sessionStart = Date()
     private var totalReps = 0
     private var completedSets = 0
@@ -791,9 +1177,11 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         resetMotion()
         phase = .finished
         guard totalReps > 0 else { return }
-        result = WorkoutRecord(workout: workout, reps: totalReps, sets: completedSets,
+        let completed = WorkoutRecord(workout: workout, reps: totalReps, sets: completedSets,
                                seconds: max(0, Int(Date().timeIntervalSince(sessionStart))),
                                points: totalReps * workout.level.rawValue + completedSets * 5)
+        summary = completed
+        if !isSimulating { result = completed }
     }
 
     private let suffix = "-E8F2-537E-4F6C-D104768A1214"
@@ -814,11 +1202,24 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     override init() {
         super.init()
         central = CBCentralManager(delegate: self, queue: nil)
+        distanceTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            guard let self, !self.isSimulating, let last = self.lastLiveSample,
+                  ProcessInfo.processInfo.systemUptime - last > 1 else { return }
+            self.lastLiveSample = nil
+            self.measure(0)
+        }
+    }
+
+    deinit {
+        simulationTimer?.invalidate()
+        distanceTimer?.invalidate()
+        restTimer?.invalidate()
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         guard central.state == .poweredOn else {
             connected = false
+            if !isSimulating { measure(0) }
             connection = "Bluetooth 상태를 확인하세요"
             return
         }
@@ -826,6 +1227,8 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func stopConnection() {
+        simulationTimer?.invalidate()
+        distanceTimer?.invalidate()
         central.stopScan()
         if let sensor { central.cancelPeripheralConnection(sensor) }
         sensor?.delegate = nil
@@ -857,7 +1260,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         connected = false
-        resetMotion()
+        if !isSimulating { measure(0) }
         scan()
     }
 
@@ -887,9 +1290,10 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil, let data = characteristic.value, data.count == 2 else { return }
+        guard !isSimulating, error == nil, let data = characteristic.value, data.count == 2 else { return }
         let bytes = Array(data)
         if characteristic.uuid == distance {
+            lastLiveSample = ProcessInfo.processInfo.systemUptime
             measure(Double(Int(bytes[0]) + Int(bytes[1]) * 256))
         } else if characteristic.uuid == gestureID {
             gesture(bytes[0])
@@ -899,21 +1303,22 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     func gesture(_ direction: UInt8) {
         switch (direction, phase) {
         case (4, .ready), (4, .finished):
-            guard connected else { return }
+            guard canMeasure else { return }
             reps = 0
             set = 1
             totalReps = 0
             completedSets = 0
+            summary = nil
             sessionStart = Date()
             calibrate()
         case (4, .paused):
-            guard connected else { return }
+            guard canMeasure else { return }
             calibrate()
         case (3, .training), (3, .calibrating):
             guard descent == nil else { return }
             pause()
         case (1, .resting):
-            guard connected else { return }
+            guard canMeasure else { return }
             restTimer?.invalidate()
             set += 1
             reps = 0
@@ -940,17 +1345,21 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         samples.removeAll()
         calibration.removeAll()
         calibrationStart = nil
+        calibrationProgress = 0
+        isSimulatingRep = false
         descent = nil
         reachedDepth = false
         shallow = false
     }
 
     private func measure(_ millimeters: Double) {
-        guard phase == .calibrating || phase == .training else { return }
         guard millimeters > 0 else {
+            latestDistance = nil
             resetMotion()
             return
         }
+        latestDistance = millimeters
+        guard phase == .calibrating || phase == .training else { return }
 
         samples.append(millimeters)
         if samples.count > 3 { samples.removeFirst() }
@@ -961,9 +1370,12 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         if phase == .calibrating {
             if calibrationStart == nil { calibrationStart = now }
             calibration.append(filtered)
-            if let start = calibrationStart, now - start >= 2 {
-                baseline = calibration.reduce(0, +) / Double(calibration.count)
-                phase = .training
+            if let start = calibrationStart {
+                calibrationProgress = min(1, (now - start) / 2)
+                if calibrationProgress == 1 {
+                    baseline = calibration.reduce(0, +) / Double(calibration.count)
+                    phase = .training
+                }
             }
             return
         }

@@ -14,8 +14,10 @@
   A00000000000000000000009 = {isa = PBXSourcesBuildPhase; files = (A0000000000000000000000B,); };
   A0000000000000000000000A = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
    PRODUCT_NAME = MYMS; PRODUCT_BUNDLE_IDENTIFIER = edu.myms.fitness; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-   IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = 1; SWIFT_VERSION = 5.0;
+   IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_VERSION = 5.0;
    GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+   INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+   "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
    INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "MYMS 운동 센서의 거리와 손 제스처를 받습니다.";
    CODE_SIGN_STYLE = Automatic; ALWAYS_SEARCH_USER_PATHS = NO;
   }; };
