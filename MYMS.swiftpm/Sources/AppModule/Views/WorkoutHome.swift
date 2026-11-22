@@ -13,7 +13,7 @@ struct WorkoutHome: View {
     init(account: LocalAccount, accounts: Accounts) {
         self.account = account
         self.accounts = accounts
-        _store = StateObject(wrappedValue: WorkoutStore(token: accounts.token))
+        _store = StateObject(wrappedValue: WorkoutStore(accounts: accounts))
     }
     @State var tab = 0
     @State var editing: Workout?

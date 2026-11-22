@@ -13,7 +13,7 @@ final class WorkoutStore: ObservableObject {
     @Published private(set) var syncError: String?
     @Published private(set) var syncing = false
 
-    private let token: String?
+    private let accounts: Accounts
     private var loading = false
     private var pending: [Mutation] = []
 
@@ -26,20 +26,20 @@ final class WorkoutStore: ObservableObject {
 
     var points: Int { records.reduce(0) { $0 + $1.points } }
 
-    init(token: String?) { self.token = token }
+    init(accounts: Accounts) { self.accounts = accounts }
 
     static func namespace(for accountID: UUID) -> String {
         "myms.account.\(accountID.uuidString)."
     }
 
     func load() async {
-        guard !loaded, !loading, let token else { return }
+        guard !loaded, !loading else { return }
         loading = true
         syncError = nil
         defer { loading = false }
         do {
-            async let planData = MYMSCloud.request("/rest/v1/workout_plans?order=sort_order.asc,id.asc", token: token)
-            async let sessionData = MYMSCloud.request("/rest/v1/workout_sessions?order=finished_at.desc,id.desc", token: token)
+            async let planData = accounts.request("/rest/v1/workout_plans?order=sort_order.asc,id.asc")
+            async let sessionData = accounts.request("/rest/v1/workout_sessions?order=finished_at.desc,id.desc")
             let decoder = JSONDecoder()
             let plans = try decoder.decode([PlanRow].self, from: await planData).map { try $0.workout() }
             let records = try decoder.decode([SessionRow].self, from: await sessionData).map { try $0.record() }
@@ -57,15 +57,15 @@ final class WorkoutStore: ObservableObject {
     }
 
     private func flush() {
-        guard !syncing, !pending.isEmpty, let token else { return }
+        guard !syncing, !pending.isEmpty else { return }
         syncing = true
         syncError = nil
         Task {
             defer { syncing = false }
             while let next = pending.first {
                 do {
-                    _ = try await MYMSCloud.request(next.path, method: next.method, token: token,
-                                                    body: next.body, prefer: next.prefer)
+                    _ = try await accounts.request(next.path, method: next.method,
+                                                   body: next.body, prefer: next.prefer)
                     pending.removeFirst()
                 } catch {
                     syncError = error.localizedDescription

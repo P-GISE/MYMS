@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 enum MYMSCloud {
     static let url = "https://jlqustzqllvkeokjnjiw.supabase.co"
@@ -29,5 +30,32 @@ enum MYMSCloud {
             throw RequestError(status: http.statusCode, detail: detail)
         }
         return data
+    }
+
+    private static let vault: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "edu.myms.fitness.session",
+        kSecAttrAccount as String: "refresh_token"
+    ]
+
+    /// 앱을 다시 열어도 로그인이 유지되도록 Keychain에 보관하는 refresh token입니다.
+    static var savedRefreshToken: String? {
+        get {
+            var query = vault
+            query[kSecReturnData as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+                  let data = item as? Data else { return nil }
+            return String(decoding: data, as: UTF8.self)
+        }
+        set {
+            SecItemDelete(vault as CFDictionary)
+            guard let newValue else { return }
+            var item = vault
+            item[kSecValueData as String] = Data(newValue.utf8)
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+            SecItemAdd(item as CFDictionary, nil)
+        }
     }
 }
