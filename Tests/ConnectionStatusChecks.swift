@@ -14,6 +14,13 @@ struct ConnectionStatusChecks {
         assert(Coach.parseHardwareID("0123456789ABCDE") == nil)
         assert(Coach.parseHardwareID("0123456789ABCDEG") == nil)
         assert(Coach.parseHardwareID("０123456789ABCDEF") == nil)
+        let first = "0123456789ABCDEF"
+        let other = "FEDCBA9876543210"
+        assert(Coach.matchesHardwareID(first, advertised: nil, remembered: first))
+        assert(Coach.matchesHardwareID(first, advertised: first, remembered: first))
+        assert(!Coach.matchesHardwareID(other, advertised: nil, remembered: first))
+        assert(!Coach.matchesHardwareID(first, advertised: other, remembered: first))
+        assert(Coach.matchesHardwareID(first, advertised: nil, remembered: nil))
         print("ConnectionStatusChecks passed")
     }
 }

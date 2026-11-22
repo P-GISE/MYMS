@@ -39,6 +39,12 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     private var discoveredPeripherals: [UUID: CBPeripheral] = [:]
     private var scanTimer: Timer?
     private var pendingDeviceID: UUID?
+    private var cancellingPeripheral: CBPeripheral?
+    private var rememberedHardwareIDs: [UUID: String] = [:]
+    @Published private(set) var isSearchingDevices = false
+    var canChooseDevice: Bool {
+        central?.state == .poweredOn && !handshakeActive && pendingDeviceID == nil && cancellingPeripheral == nil
+    }
     private var validDistanceAt: TimeInterval?
     private var validAccelerationAt: TimeInterval?
     private var distanceDate: Date?
@@ -410,6 +416,8 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         guard central.state == .poweredOn else {
             connected = false
             pendingDeviceID = nil
+            cancellingPeripheral = nil
+            isSearchingDevices = false
             scanTimer?.invalidate()
             discoveredDevices.removeAll()
             discoveredPeripherals.removeAll()
@@ -433,6 +441,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
 
     func stopConnection() {
         pendingDeviceID = nil
+        cancellingPeripheral = nil
         suspendForBackground()
         simulationTimer?.invalidate()
         distanceTimer?.invalidate()
@@ -440,6 +449,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         restTimer?.invalidate()
         progressTimer?.invalidate()
         central.stopScan()
+        isSearchingDevices = false
         scanTimer?.invalidate()
         if let sensor { central.cancelPeripheralConnection(sensor) }
         sensor?.delegate = nil
@@ -452,7 +462,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func refreshDevices() {
-        guard !handshakeActive, pendingDeviceID == nil else { return }
+        guard !handshakeActive, pendingDeviceID == nil, cancellingPeripheral == nil else { return }
         guard central.state == .poweredOn else {
             centralManagerDidUpdateState(central)
             return
@@ -466,16 +476,18 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     private func scan() {
-        guard central.state == .poweredOn, !handshakeActive else { return }
+        guard canChooseDevice else { return }
         scanTimer?.invalidate()
         if sensor == nil {
             connectionStage = .searching
             connection = "주변 MYMS 기기를 검색하고 있습니다"
         }
+        isSearchingDevices = true
         central.scanForPeripherals(withServices: [service], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         scanTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: false) { [weak self] _ in
             guard let self else { return }
             self.central.stopScan()
+            self.isSearchingDevices = false
             guard self.sensor == nil else { return }
             self.connectionStage = .waiting
             self.connection = self.discoveredDevices.isEmpty
@@ -487,9 +499,11 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
         guard central.isScanning else { return }
+        let previous = discoveredDevices.first { $0.id == peripheral.identifier }
         let name = (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
-            ?? peripheral.name ?? "이름 없는 MYMS 기기"
-        let advertisedID = name.hasPrefix("MYMS-") ? Self.parseHardwareID(String(name.dropFirst(5))) : nil
+            ?? previous?.name ?? peripheral.name ?? "이름 없는 MYMS 기기"
+        let advertisedID = (name.hasPrefix("MYMS-") ? Self.parseHardwareID(String(name.dropFirst(5))) : nil)
+            ?? previous?.hardwareID ?? rememberedHardwareIDs[peripheral.identifier]
         let device = SensorDevice(id: peripheral.identifier, name: name, rssi: RSSI.intValue,
                                   hardwareID: advertisedID)
         discoveredPeripherals[device.id] = peripheral
@@ -501,7 +515,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func connectDevice(_ id: UUID) {
-        guard central.state == .poweredOn, !handshakeActive, pendingDeviceID == nil,
+        guard canChooseDevice,
               let device = discoveredDevices.first(where: { $0.id == id })
                 ?? selectedDevice.flatMap({ $0.id == id ? $0 : nil }) else { return }
         guard let peripheral = discoveredPeripherals[id]
@@ -518,13 +532,15 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             connected = false
             verifiedHardwareID = nil
             central.stopScan()
+            isSearchingDevices = false
             scanTimer?.invalidate()
             connectionStage = .connecting
             connection = "기존 연결을 종료하고 선택한 기기로 변경 중"
-            central.cancelPeripheralConnection(previous)
+            cancelConnection(previous)
             return
         }
         central.stopScan()
+        isSearchingDevices = false
         scanTimer?.invalidate()
         if !isSimulating { pauseForConnectionLoss() }
         clearTelemetry()
@@ -543,6 +559,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func disconnectDevice() {
+        guard sensor != nil || cancellingPeripheral == nil else { return }
         pendingDeviceID = nil
         if !isSimulating { pauseForConnectionLoss() }
         connectionTimer?.invalidate()
@@ -552,9 +569,14 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         connected = false
         selectedDevice = nil
         clearTelemetry()
-        if let previous { central.cancelPeripheralConnection(previous) }
         if !isSimulating { measure(0) }
-        refreshDevices()
+        if let previous {
+            connectionStage = .connecting
+            connection = "기기 연결을 종료하는 중"
+            cancelConnection(previous)
+        } else if cancellingPeripheral == nil {
+            refreshDevices()
+        }
     }
 
     private func updateConnectionStatus() {
@@ -580,6 +602,10 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        if peripheral === cancellingPeripheral {
+            centralManager(central, didDisconnectPeripheral: peripheral, error: error)
+            return
+        }
         guard peripheral === sensor else { return }
         connectionTimer?.invalidate()
         let failure = deviceError ?? error?.localizedDescription ?? "센서에 연결하지 못했습니다."
@@ -593,6 +619,14 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        if peripheral === cancellingPeripheral {
+            cancellingPeripheral = nil
+            connectionTimer?.invalidate()
+            if peripheral !== sensor {
+                refreshDevices()
+                return
+            }
+        }
         guard peripheral === sensor else { return }
         connected = false
         connectionTimer?.invalidate()
@@ -666,6 +700,10 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         return text.uppercased()
     }
 
+    static func matchesHardwareID(_ identity: String, advertised: String?, remembered: String?) -> Bool {
+        (advertised == nil || advertised == identity) && (remembered == nil || remembered == identity)
+    }
+
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         guard peripheral === sensor, characteristic.service?.uuid == service else { return }
         guard handshakeActive || connected else { return }
@@ -713,7 +751,19 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         connectionStage = .failed
         connection = "센서 연결 실패"
         if !isSimulating { pauseForConnectionLoss() }
+        cancelConnection(peripheral)
+    }
+
+    private func cancelConnection(_ peripheral: CBPeripheral) {
+        cancellingPeripheral = peripheral
+        connectionTimer?.invalidate()
         central.cancelPeripheralConnection(peripheral)
+        connectionTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { [weak self] _ in
+            guard let self, self.cancellingPeripheral === peripheral else { return }
+            self.pendingDeviceID = nil
+            self.connectionStage = .failed
+            self.connection = "연결 종료가 지연됩니다. Bluetooth를 껐다 켠 뒤 다시 연결하세요"
+        }
     }
 
     private func resetHandshake() {
@@ -735,11 +785,16 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
                 return
             }
             // Scan responses may be absent; the board's readable ID is authoritative.
-            if let advertised = selectedDevice?.hardwareID, advertised != identity {
-                failHandshake("광고된 기기 ID와 실제 보드 ID가 다릅니다. 연결을 중단합니다.", peripheral: peripheral)
+            if !Self.matchesHardwareID(identity, advertised: selectedDevice?.hardwareID,
+                                       remembered: rememberedHardwareIDs[peripheral.identifier]) {
+                failHandshake("선택한 기기의 ID와 실제 보드 ID가 다릅니다. 연결을 중단합니다.", peripheral: peripheral)
                 return
             }
             verifiedHardwareID = identity
+            rememberedHardwareIDs[peripheral.identifier] = identity
+            if let device = selectedDevice {
+                selectedDevice = SensorDevice(id: device.id, name: device.name, rssi: device.rssi, hardwareID: identity)
+            }
             awaitingIdentity = false
             if let ledCharacteristic, ledCharacteristic.properties.contains(.read) {
                 awaitingInitialLED = true

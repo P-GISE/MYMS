@@ -120,7 +120,7 @@ struct SensorConnectionCard: View {
                         } else if let hardwareID = device.hardwareID {
                             Text("아두이노 ID · \(hardwareID)")
                                 .font(.subheadline.monospaced()).textSelection(.enabled)
-                            Text("광고된 ID · 보드 응답 확인 전")
+                            Text("선택한 보드 ID · 연결 후 재확인")
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("연결 후 보드 ID 확인")
@@ -183,19 +183,19 @@ struct SensorConnectionCard: View {
             Label(coach.selectedDevice == nil ? "기기 선택" : "다른 기기 선택", systemImage: "list.bullet")
         }
         .buttonStyle(.borderedProminent)
-        .disabled(coach.connectionStage == .unavailable)
+        .disabled(!coach.canChooseDevice)
         if coach.selectedDevice != nil {
             if !coach.connected, !isBusy, let device = coach.selectedDevice {
                 Button("다시 연결") { coach.connectDevice(device.id) }
                     .buttonStyle(.bordered)
-                    .disabled(coach.connectionStage == .unavailable)
+                    .disabled(!coach.canChooseDevice)
             }
             Button("연결 해제", role: .destructive) { coach.disconnectDevice() }
                 .buttonStyle(.bordered)
         } else {
             Button("다시 검색") { coach.refreshDevices() }
                 .buttonStyle(.bordered)
-                .disabled(coach.connectionStage == .unavailable || isBusy)
+                .disabled(!coach.canChooseDevice || coach.isSearchingDevices)
         }
     }
 
@@ -203,7 +203,7 @@ struct SensorConnectionCard: View {
         NavigationStack {
             List {
                 Section {
-                    if coach.connectionStage == .searching {
+                    if coach.isSearchingDevices {
                         ProgressView("주변 MYMS 기기 검색 중")
                     }
                     if coach.discoveredDevices.isEmpty {
@@ -231,9 +231,10 @@ struct SensorConnectionCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                         }
+                        .disabled(!coach.canChooseDevice)
                     }
                 } footer: {
-                    Text("아두이노가 알리는 보드 고유 ID입니다. 선택하면 보드에서 ID를 직접 읽어 대조합니다. 같은 이름이어도 ID를 확인하고, LED로 실물을 구분하세요.")
+                    Text("선택하면 보드 고유 ID를 직접 읽고, 광고 또는 이전에 확인한 ID와 비교합니다. 같은 이름이어도 ID를 확인하고, LED로 실물을 구분하세요.")
                 }
             }
             .navigationTitle("센서 선택")
@@ -243,7 +244,7 @@ struct SensorConnectionCard: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button("다시 검색") { coach.refreshDevices() }
-                        .disabled(coach.connectionStage == .unavailable || coach.connectionStage == .searching)
+                        .disabled(!coach.canChooseDevice || coach.isSearchingDevices)
                 }
             }
             .onAppear { coach.refreshDevices() }
