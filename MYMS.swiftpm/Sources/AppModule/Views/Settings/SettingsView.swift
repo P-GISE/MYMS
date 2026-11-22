@@ -15,7 +15,7 @@ extension WorkoutHome {
                 Section {
                     Button("로그아웃") {
                         accounts.signOut()
-                    }.disabled(!coach.canSelect || store.syncing || store.syncError != nil || store.localError != nil)
+                    }.disabled(!coach.canSelect || store.syncing || store.localError != nil)
                     if !accounts.isLocalMode { Button("회원 탈퇴", role: .destructive) {
                         deletionPassword = ""
                         confirmDeletion = true

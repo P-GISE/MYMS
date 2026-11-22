@@ -388,7 +388,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
                ProcessInfo.processInfo.systemUptime - last > 1 {
                 self.lastLiveSample = nil
                 self.measure(0)
-                if self.measurementMode == .distance { self.pause() }
+                if self.measurementMode == .distance { self.pauseForConnectionLoss() }
             }
         }
         progressTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -775,6 +775,8 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             if millimeters > 0 {
                 validDistanceAt = lastLiveSample
                 distanceDate = Date()
+            } else {
+                validDistanceAt = nil
             }
             measure(millimeters)
             updateConnectionStatus()
@@ -850,7 +852,6 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         let now = ProcessInfo.processInfo.systemUptime
         if let last = receivedAt["acceleration"], now - last > 2 {
             acceleration = nil
-            if !isSimulating, measurementMode == .acceleration { pause() }
         }
         if let last = receivedAt["button"], now - last > 2 { proximityPressed = false }
         if let last = receivedAt["brightness"], now - last > 3 { environment.brightnessRaw = nil }
@@ -860,6 +861,11 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             floorWindow = StableGravityWindow()
             floorCalibrationProgress = 0
             isCalibratingFloor = false
+        }
+        if !isSimulating, connected,
+           phase == .training || phase == .calibrating || (phase == .resting && !restInterrupted) {
+            let last = measurementMode == .distance ? validDistanceAt : validAccelerationAt
+            if ConnectionStage.measurement(last, now) != .receiving { pauseForConnectionLoss() }
         }
     }
 

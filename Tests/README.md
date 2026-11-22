@@ -71,3 +71,5 @@ Windows에서는 SwiftUI 빌드 및 실제 화면 검증을 수행하지 못했�
 
 `ConnectionStatusChecks.swift`는 연결 상태의 시간 경계·잘못된 시각과 ID 길이·ASCII 16진수 형식을 검사합니다. iOS 테스트용 실행 타깃에 AppModule 소스(기존 MYMSApp의 @main 제외)와 함께 포함해 실행해야 합니다. Windows에서는 실행하지 않았습니다.
 고유 ID 실기기 검사는 Windows에서 `uv pip install --target build/ble-check-deps bleak anyio`로 준비한 뒤 `python Tests/ble/hardware_identity_check.py`를 실행합니다. 다른 중앙 기기의 연결을 해제해야 합니다. 스캔 응답 이름이 수신되지 않으면 광고 ID 대조는 생략하고 보드에서 읽은 고유 ID를 확인합니다.
+
+추가 디버깅 회귀 확인: BLE 연결을 유지한 채 선택한 측정값을 끊거나 거리 0을 보내면 정상 수신 표시가 해제되고, 휴식 중에도 남은 휴식·운동 시간이 멈춰야 합니다. 데이터가 돌아와도 사용자가 재개하기 전 자동으로 이어지면 안 됩니다. 네트워크 동기화만 실패했을 때는 진행 중 운동·기기 저장 오류가 없는 상태에서 로그아웃할 수 있어야 합니다. 이 시나리오의 iPad 실행은 아직 수행하지 않았습니다.
