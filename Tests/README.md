@@ -54,7 +54,7 @@ python Tests/ble/ble_runtime_check.py led-control all_notify_and_led 2
 ```
 
 결과는 `build/ble-debug/<첫 번째 인수>.json`에 기록됩니다. `notify_only`는 알림 수신, `all_notify_and_read`는 알림 중 센서 읽기·LED 제어, `all_notify_and_led`는 알림 중 LED 제어입니다.
-전체 알림을 받는 동안 추가 읽기·쓰기를 수행하면 이 Windows 환경에서 시간 초과가 재현됩니다. 해당 시나리오의 실패를 통과로 바꾸지 않습니다.
+기본 ArduinoBLE에서는 전체 알림 중 읽기·쓰기 시간 초과가 재현됐습니다. 현재 보정 빌드와 검증 결과는 [Arduino/BLE-BUILD.md](../Arduino/BLE-BUILD.md)를 참고하세요. 먼저 해당 빌드·업로드를 수행한 뒤 검사합니다. 실패 결과도 그대로 보존합니다.
 필요하면 마지막 인수에 `throughput`을 추가해 Windows의 전송량 우선 요청과 실제 연결 주기를 기록할 수 있습니다. 15ms 연결에서도 오류가 재현돼 해결책으로 간주하지 않습니다.
 ## 센서 연결 화면 수동 확인
 
