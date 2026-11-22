@@ -2,8 +2,8 @@ import Foundation
 import Security
 
 enum MYMSCloud {
-    static let url = "https://jlqustzqllvkeokjnjiw.supabase.co"
-    static let key = "sb_publishable_SCbQKG6cvQi-UBqAGwhX0Q_EXekm8LK"
+    static let url = "https://pppidannfctewwtshspw.supabase.co"
+    static let key = "sb_publishable_tuvdGsU8Op-RPmaceKhxFQ_fLRxLpkw"
 
     struct RequestError: LocalizedError {
         let status: Int
