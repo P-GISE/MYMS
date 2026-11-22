@@ -51,5 +51,6 @@ struct RegistrationScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { accounts.message = nil }
+        .onDisappear { accounts.message = nil }
     }
 }

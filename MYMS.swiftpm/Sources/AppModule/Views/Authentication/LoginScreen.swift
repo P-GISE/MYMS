@@ -37,7 +37,6 @@ struct LoginScreen: View {
                 .padding(.top, 8)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear { accounts.message = nil }
         }
     }
 
