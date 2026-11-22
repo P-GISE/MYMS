@@ -156,6 +156,7 @@ final class Accounts: ObservableObject {
             let prefix = WorkoutStore.namespace(for: account.id)
             UserDefaults.standard.removeObject(forKey: prefix + "myms.plans")
             UserDefaults.standard.removeObject(forKey: prefix + "myms.records")
+            UserDefaults.standard.removeObject(forKey: prefix + "myms.pending")
             endSession()
             return true
         } catch {

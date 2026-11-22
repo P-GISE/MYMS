@@ -8,7 +8,10 @@ enum MYMSCloud {
     struct RequestError: LocalizedError {
         let status: Int
         let detail: String
+        var code: String?
         var errorDescription: String? { detail }
+        /// 값이 잘못되었거나 제약 조건에 걸려, 다시 보내도 받아들여지지 않는 오류입니다 (Postgres 22·23 계열).
+        var rejectsData: Bool { code.map { $0.hasPrefix("22") || $0.hasPrefix("23") } ?? false }
     }
 
     static func request(_ path: String, method: String = "GET", token: String? = nil,
@@ -27,7 +30,7 @@ enum MYMSCloud {
         guard (200..<300).contains(http.statusCode) else {
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let detail = payload?["msg"] as? String ?? payload?["message"] as? String ?? "Supabase 요청 실패"
-            throw RequestError(status: http.statusCode, detail: detail)
+            throw RequestError(status: http.statusCode, detail: detail, code: payload?["code"] as? String)
         }
         return data
     }
