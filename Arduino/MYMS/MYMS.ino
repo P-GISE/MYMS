@@ -4,6 +4,7 @@
 #include <VL53L0X.h>
 #include <Wire.h>
 #include <math.h>
+#include <nrf.h>
 
 BLEService fitness("19B10000-E8F2-537E-4F6C-D104768A1214");
 BLEFloatCharacteristic acceleration("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify);
@@ -13,6 +14,9 @@ BLECharacteristic distance("19B10004-E8F2-537E-4F6C-D104768A1214", BLERead | BLE
 BLECharacteristic gesture("19B10005-E8F2-537E-4F6C-D104768A1214", BLENotify, 2, true);
 BLEFloatCharacteristic brightness("19B10009-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify);
 BLECharacteristic accelerationVector("19B1000A-E8F2-537E-4F6C-D104768A1214", BLERead | BLENotify, 12, true);
+BLECharacteristic deviceIdentity("19B1000B-E8F2-537E-4F6C-D104768A1214", BLERead, 16, true);
+char hardwareID[17];
+char advertisedName[22];
 VL53L0X tof;
 bool distanceAvailable = false;
 bool gestureAvailable = false;
@@ -47,7 +51,12 @@ void setup() {
       delay(1000);
     }
   }
-  BLE.setLocalName("SmartFitnessCoach");
+  // FICR identifies the physical nRF52840 across firmware uploads.
+  snprintf(hardwareID, sizeof(hardwareID), "%08lX%08lX",
+           static_cast<unsigned long>(NRF_FICR->DEVICEID[1]),
+           static_cast<unsigned long>(NRF_FICR->DEVICEID[0]));
+  snprintf(advertisedName, sizeof(advertisedName), "MYMS-%s", hardwareID);
+  BLE.setLocalName(advertisedName);
   BLE.setAdvertisedService(fitness);
   fitness.addCharacteristic(acceleration);
   fitness.addCharacteristic(button);
@@ -56,7 +65,11 @@ void setup() {
   fitness.addCharacteristic(gesture);
   fitness.addCharacteristic(brightness);
   fitness.addCharacteristic(accelerationVector);
+  fitness.addCharacteristic(deviceIdentity);
   BLE.addService(fitness);
+  deviceIdentity.writeValue(reinterpret_cast<const uint8_t *>(hardwareID), 16);
+  Serial.print("arduino_id=");
+  Serial.println(hardwareID);
   acceleration.writeValue(NAN);
   brightness.writeValue(NAN);
   accelerationVector.writeValue(reinterpret_cast<const uint8_t *>(accelerationAxes), sizeof(accelerationAxes));
