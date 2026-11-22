@@ -105,4 +105,6 @@ struct WorkoutRecord: Codable, Identifiable {
     var seconds: Int
     var note = ""
     var points: Int
+    var environment: SensorEnvironment? = nil
+    var measurementSource: String? = nil
 }

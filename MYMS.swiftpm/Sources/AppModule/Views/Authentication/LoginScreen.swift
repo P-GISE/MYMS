@@ -35,6 +35,11 @@ struct LoginScreen: View {
                 .font(.subheadline)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
+                Button("로그인 없이 이 기기에서 시작") { accounts.enterLocalMode() }
+                    .disabled(accounts.busy)
+                    .frame(maxWidth: .infinity)
+                Text("로컬 기록은 이 기기에 저장되며 서버 계정과 별도로 관리됩니다.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             .navigationBarTitleDisplayMode(.inline)
         }

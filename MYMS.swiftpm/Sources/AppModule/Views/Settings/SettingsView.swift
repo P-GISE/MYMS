@@ -10,22 +10,24 @@ extension WorkoutHome {
                         get: { accounts.current?.ageGroup },
                         set: { accounts.updateAgeGroup($0) }
                     ))
-                    Text("Supabase 계정").foregroundStyle(.secondary)
+                    Text(accounts.isLocalMode ? "이 기기의 로컬 모드" : "Supabase 계정").foregroundStyle(.secondary)
                 }
                 Section {
                     Button("로그아웃") {
                         accounts.signOut()
-                    }.disabled(!coach.canSelect || store.syncing || store.syncError != nil)
-                    Button("회원 탈퇴", role: .destructive) {
+                    }.disabled(!coach.canSelect || store.syncing || store.syncError != nil || store.localError != nil)
+                    if !accounts.isLocalMode { Button("회원 탈퇴", role: .destructive) {
                         deletionPassword = ""
                         confirmDeletion = true
-                    }.disabled(!coach.canSelect || store.syncing || store.syncError != nil)
+                    }.disabled(!coach.canSelect || store.syncing || store.syncError != nil || store.localError != nil) }
                 } footer: {
                     if !coach.canSelect { Text("운동을 종료한 뒤 계정 설정을 변경할 수 있습니다.") }
                 }
             }
             .navigationTitle("설정")
-            .sheet(isPresented: $confirmDeletion, onDismiss: { accounts.message = nil }) {
+            .sheet(isPresented: $confirmDeletion, onDismiss: {
+                if accounts.current != nil { accounts.message = nil }
+            }) {
                 NavigationStack {
                     Form {
                         Section {

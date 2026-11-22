@@ -25,6 +25,16 @@ final class Accounts: ObservableObject {
     private var refreshToken: String?
     private var refreshing: Task<CloudSession, Error>?
 
+    static let localAccountID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    var isLocalMode: Bool { current?.id == Self.localAccountID }
+
+    func enterLocalMode() {
+        guard !busy, !restoring else { return }
+        endSession()
+        let age = UserDefaults.standard.string(forKey: "myms.local.ageGroup").flatMap(AgeGroup.init(rawValue:))
+        current = LocalAccount(id: Self.localAccountID, email: "이 기기에 저장", ageGroup: age)
+    }
+
     init() {
         refreshToken = MYMSCloud.savedRefreshToken
         guard refreshToken != nil else { return }
@@ -57,12 +67,14 @@ final class Accounts: ObservableObject {
     func request(_ path: String, method: String = "GET", body: [String: Any]? = nil,
                  prefer: String? = nil) async throws -> Data {
         guard let token else { throw URLError(.userAuthenticationRequired) }
+        let accountID = current?.id
         do {
             return try await MYMSCloud.request(path, method: method, token: token, body: body, prefer: prefer)
         } catch let error as MYMSCloud.RequestError where error.status == 401 {
+            guard current?.id == accountID else { throw URLError(.userAuthenticationRequired) }
             var fresh = self.token
             if fresh == token { fresh = try await refreshSession().access_token }
-            guard let fresh else { throw error }
+            guard current?.id == accountID, let fresh else { throw error }
             return try await MYMSCloud.request(path, method: method, token: fresh, body: body, prefer: prefer)
         }
     }
@@ -84,10 +96,13 @@ final class Accounts: ObservableObject {
                 let data = try await MYMSCloud.request("/auth/v1/token?grant_type=refresh_token", method: "POST",
                                                        body: ["refresh_token": refreshToken])
                 let session = try JSONDecoder().decode(CloudSession.self, from: data)
+                guard self.refreshToken == refreshToken else { throw URLError(.cancelled) }
                 adopt(session)
                 return session
             } catch let error as MYMSCloud.RequestError where [400, 401, 403].contains(error.status) {
-                endSession(message: "로그인이 만료되었습니다. 다시 로그인하세요.")
+                if self.refreshToken == refreshToken {
+                    endSession(message: "로그인이 만료되었습니다. 다시 로그인하세요.")
+                }
                 throw error
             }
         }
@@ -130,6 +145,12 @@ final class Accounts: ObservableObject {
 
     func updateAgeGroup(_ ageGroup: AgeGroup?) {
         guard var account = current else { return }
+        if isLocalMode {
+            account.ageGroup = ageGroup
+            UserDefaults.standard.set(ageGroup?.rawValue, forKey: "myms.local.ageGroup")
+            current = account
+            return
+        }
         authenticate {
             _ = try await self.request("/rest/v1/profiles?id=eq.\(account.id.uuidString)", method: "PATCH",
                                        body: ["age_group": ageGroup?.cloudCode as Any? ?? NSNull()])
@@ -140,23 +161,34 @@ final class Accounts: ObservableObject {
 
     /// 서버 응답과 상관없이 기기에서는 바로 로그아웃합니다.
     func signOut() {
-        guard let token, !busy else { return }
+        guard !busy else { return }
+        if isLocalMode { endSession(); return }
+        guard let token else { return }
         endSession()
         Task { _ = try? await MYMSCloud.request("/auth/v1/logout?scope=local", method: "POST", token: token) }
     }
 
     func delete(password: String) async -> Bool {
         guard let account = current, !busy else { return false }
+        guard !isLocalMode else {
+            message = "로컬 모드에서는 기록 화면에서 기록을 삭제하세요."
+            return false
+        }
         busy = true
         defer { busy = false }
         do {
             let session = try await passwordSession(email: account.email, password: password)
             _ = try await MYMSCloud.request("/rest/v1/rpc/delete_my_account", method: "POST",
                                            token: session.access_token, body: [:])
+            var cleanupError: String?
+            do { try WorkoutStore.deleteLocalData(for: account.id) }
+            catch {
+                cleanupError = "서버 계정은 삭제됐지만 기기 기록 삭제에 실패했습니다: " + error.localizedDescription
+            }
             let prefix = WorkoutStore.namespace(for: account.id)
             UserDefaults.standard.removeObject(forKey: prefix + "myms.plans")
             UserDefaults.standard.removeObject(forKey: prefix + "myms.records")
-            endSession()
+            endSession(message: cleanupError)
             return true
         } catch {
             message = error.localizedDescription
