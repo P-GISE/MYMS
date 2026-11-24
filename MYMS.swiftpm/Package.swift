@@ -13,6 +13,7 @@ let package = Package(
             bundleIdentifier: "edu.myms.fitness",
             displayVersion: "1.0",
             bundleVersion: "1",
+            appIcon: .asset("AppIcon"),
             supportedDeviceFamilies: [.pad, .phone],
             supportedInterfaceOrientations: [
                 .portrait,

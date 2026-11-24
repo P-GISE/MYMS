@@ -249,6 +249,9 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
     let onFailure: () -> Void
 
     final class Preview: UIImageView {
+        override var intrinsicContentSize: CGSize {
+            CGSize(width: UIView.noIntrinsicMetric, height: UIView.noIntrinsicMetric)
+        }
         var rotation: AVCaptureDevice.RotationCoordinator?
         var observation: NSKeyValueObservation?
         var active = true
@@ -276,7 +279,7 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
             var points: [Joint: VNRecognizedPoint] = [:]
             if detected, let poses = request.results, poses.count == 1, let pose = poses.first,
                let recognized = try? pose.recognizedPoints(.all) {
-                points = recognized.filter { $0.value.confidence >= 0.35 }
+                points = recognized.filter { $0.value.confidence >= 0.25 }
             }
             let left: [Joint] = [.leftWrist, .leftElbow, .leftShoulder, .leftHip, .leftKnee, .leftAnkle]
             let right: [Joint] = [.rightWrist, .rightElbow, .rightShoulder, .rightHip, .rightKnee, .rightAnkle]
@@ -289,7 +292,8 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 let ctx = renderer.cgContext
                 ctx.setStrokeColor(UIColor.systemGreen.cgColor)
                 ctx.setFillColor(UIColor.systemGreen.cgColor)
-                ctx.setLineWidth(3)
+                ctx.setShadow(offset: .zero, blur: 5, color: UIColor.black.cgColor)
+                ctx.setLineWidth(6)
                 func location(_ joint: Joint) -> CGPoint? {
                     guard let point = points[joint] else { return nil }
                     return CGPoint(x: point.location.x * size.width, y: (1 - point.location.y) * size.height)
@@ -304,16 +308,21 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 }
                 for joint in left + right {
                     guard let p = location(joint) else { continue }
-                    ctx.fillEllipse(in: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+                    ctx.fillEllipse(in: CGRect(x: p.x - 7, y: p.y - 7, width: 14, height: 14))
                 }
             }
             let status: String
-            if detected, (request.results?.count ?? 0) > 1 {
+            let visibleCount = (left + right).filter { points[$0] != nil }.count
+            if !detected {
+                status = "자세 분석에 실패했어요. 카메라를 다시 켜 주세요"
+            } else if (request.results?.count ?? 0) > 1 {
                 status = "한 사람만 화면에 들어오도록 해 주세요"
             } else if left.allSatisfy({ points[$0] != nil }) || right.allSatisfy({ points[$0] != nil }) {
-                status = "측면 자세를 추적하고 있어요"
+                status = "자세 추적 중 · 관절 \(visibleCount)개"
+            } else if visibleCount > 0 {
+                status = "관절 \(visibleCount)개 감지 · 손목부터 발목까지 보여 주세요"
             } else {
-                status = "어깨부터 발목까지 화면에 들어오도록 위치를 조정해 주세요"
+                status = "관절 감지 대기 · 밝은 곳에서 몸 전체를 보여 주세요"
             }
             onFrame?(annotated, status)
         }
