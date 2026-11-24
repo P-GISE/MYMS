@@ -18,7 +18,9 @@ struct WorkoutHome: View {
         _store = StateObject(wrappedValue: WorkoutStore(accountID: account.id, accounts: accounts))
     }
     @State var tab: WorkoutDestination = .plans
+    @State var historyStatisticsSource: WorkoutStatistics.Source = .exercise
     @State var showsWorkoutCamera = false
+    @State var workoutDetailsHeight: CGFloat = 320
     @State var editing: Workout?
     @State var guide: Workout?
     @State var deleting: Workout?

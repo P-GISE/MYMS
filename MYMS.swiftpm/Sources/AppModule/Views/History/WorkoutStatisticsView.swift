@@ -2,6 +2,15 @@ import SwiftUI
 import Charts
 
 struct WorkoutStatistics {
+    enum Source: String, CaseIterable {
+        case exercise = "실제 운동"
+        case simulation = "시연"
+
+        func records(from records: [WorkoutRecord]) -> [WorkoutRecord] {
+            records.filter { self == .simulation ? $0.isSimulation : !$0.isLocalOnly }
+        }
+    }
+
     struct Day: Identifiable {
         let date: Date
         let reps: Int
@@ -12,8 +21,8 @@ struct WorkoutStatistics {
     let streak: Int
     let personalBest: Int
 
-    init(records: [WorkoutRecord], now: Date = Date(), calendar: Calendar = .current) {
-        let exerciseRecords = records.filter { !$0.isLocalOnly && $0.date <= now && $0.reps > 0 }
+    init(records: [WorkoutRecord], source: Source = .exercise, now: Date = Date(), calendar: Calendar = .current) {
+        let exerciseRecords = source.records(from: records).filter { $0.date <= now && $0.reps > 0 }
         let totals = Dictionary(grouping: exerciseRecords, by: { calendar.startOfDay(for: $0.date) })
             .mapValues { $0.reduce(0) { $0 + $1.reps } }
         let today = calendar.startOfDay(for: now)
@@ -35,13 +44,22 @@ struct WorkoutStatistics {
 
 struct WorkoutStatisticsView: View {
     let records: [WorkoutRecord]
+    @Binding var source: WorkoutStatistics.Source
 
     var body: some View {
-        let stats = WorkoutStatistics(records: records)
+        let stats = WorkoutStatistics(records: records, source: source)
         let weeklyReps = stats.week.reduce(0) { $0 + $1.reps }
         VStack(alignment: .leading, spacing: 14) {
+            Picker("통계 종류", selection: $source) {
+                ForEach(WorkoutStatistics.Source.allCases, id: \.self) { option in
+                    Text(option.rawValue).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("historyStatisticsSource")
+
             VStack(alignment: .leading, spacing: 3) {
-                Label("이번 주 유효 횟수", systemImage: "chart.bar.fill")
+                Label(source == .simulation ? "이번 주 시연 횟수" : "이번 주 유효 횟수", systemImage: "chart.bar.fill")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Text("\(weeklyReps)회")
                     .font(.largeTitle.bold()).monospacedDigit()
@@ -53,6 +71,9 @@ struct WorkoutStatisticsView: View {
                         y: .value("횟수", day.reps), width: .ratio(0.55))
                     .foregroundStyle(.tint)
                     .cornerRadius(4)
+                    .annotation(position: .top) {
+                        if day.reps > 0 { Text("\(day.reps)").font(.caption2).monospacedDigit() }
+                    }
                     .accessibilityLabel(day.date.formatted(.dateTime.weekday(.wide)))
                     .accessibilityValue("\(day.reps)회")
             }
@@ -63,10 +84,16 @@ struct WorkoutStatisticsView: View {
             }
             .frame(height: 132)
 
+            if weeklyReps == 0 {
+                Text(source == .simulation ? "이번 주 시연 횟수가 0회입니다. 가상 동작 후 종료하면 그래프에 반영됩니다." : "이번 주 실제 운동 횟수가 0회입니다. 시연 기록은 시연 탭에서 확인하세요.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Divider()
-            LabeledContent("연속 운동일", value: "\(stats.streak)일")
+            LabeledContent(source == .simulation ? "연속 시연일" : "연속 운동일", value: "\(stats.streak)일")
             LabeledContent("한 번에 가장 많이 한 횟수", value: "\(stats.personalBest)회")
-            Text("연속 운동일은 오늘이나 어제부터 셉니다. 시연과 IMU 동작 테스트는 통계에서 제외됩니다.")
+            Text(source == .simulation
+                 ? "시연 기록만 표시합니다. 시연은 포인트와 실제 운동 통계에 반영되지 않습니다."
+                 : "연속 운동일은 오늘이나 어제부터 셉니다. 시연과 IMU 동작 테스트는 제외됩니다.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 6)

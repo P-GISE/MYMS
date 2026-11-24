@@ -18,7 +18,7 @@ extension WorkoutHome {
                     if geometry.size.width >= 760 && !typeSize.isAccessibilitySize {
                         HStack(alignment: .top, spacing: 0) {
                             ScrollView {
-                                WorkoutStatisticsView(records: store.records)
+                                WorkoutStatisticsView(records: store.records, source: $historyStatisticsSource)
                                     .padding(20).mymsCard()
                                     .padding(.leading, 24).padding(.vertical, 12)
                             }
@@ -46,29 +46,46 @@ extension WorkoutHome {
         List {
             if includesStatistics {
                 Section {
-                    DisclosureGroup("이번 주 운동 통계") {
-                        WorkoutStatisticsView(records: store.records)
-                    }
+                    WorkoutStatisticsView(records: store.records, source: $historyStatisticsSource)
                     .listRowBackground(MYMSStyle.surface)
                 }
             }
-            Section("최근 운동 기록") {
-                ForEach(store.records) { record in
-                    NavigationLink { recordDetail(record) } label: {
-                        recordSummary(record)
-                    }
-                    .listRowBackground(MYMSStyle.surface)
-                    .swipeActions(allowsFullSwipe: false) {
-                        Button("삭제", systemImage: "trash", role: .destructive) { deletingRecord = record }
-                    }
-                    .contextMenu {
-                        Button("기록 삭제", systemImage: "trash", role: .destructive) { deletingRecord = record }
+            let selectedRecords = historyStatisticsSource.records(from: store.records)
+            Section(historyStatisticsSource == .simulation ? "최근 시연 기록" : "최근 실제 운동 기록") {
+                if selectedRecords.isEmpty {
+                    Label(historyStatisticsSource == .simulation ? "아직 시연 기록이 없어요" : "아직 실제 운동 기록이 없어요",
+                          systemImage: "clock")
+                        .foregroundStyle(.secondary)
+                        .listRowBackground(MYMSStyle.surface)
+                }
+                historyRows(selectedRecords)
+            }
+            if historyStatisticsSource == .exercise {
+                let imuRecords = store.records.filter { $0.isLocalOnly && !$0.isSimulation }
+                if !imuRecords.isEmpty {
+                    Section("IMU 동작 테스트 · 실제 운동 제외") {
+                        historyRows(imuRecords)
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+    }
+
+    private func historyRows(_ records: [WorkoutRecord]) -> some View {
+        ForEach(records) { record in
+            NavigationLink { recordDetail(record) } label: {
+                recordSummary(record)
+            }
+            .listRowBackground(MYMSStyle.surface)
+            .swipeActions(allowsFullSwipe: false) {
+                Button("삭제", systemImage: "trash", role: .destructive) { deletingRecord = record }
+            }
+            .contextMenu {
+                Button("기록 삭제", systemImage: "trash", role: .destructive) { deletingRecord = record }
+            }
+        }
     }
 
     private func recordSummary(_ record: WorkoutRecord) -> some View {
@@ -86,7 +103,7 @@ extension WorkoutHome {
                 Text("\(record.reps)회 · \(record.sets)세트 · \(record.points) P")
                     .font(.subheadline).monospacedDigit()
                 if record.isSimulation {
-                    Label("시연 · 통계 제외", systemImage: "play.rectangle")
+                    Label("시연 · 실제 운동 제외", systemImage: "play.rectangle")
                         .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 } else if record.isLocalOnly {
                     Label("IMU 동작 테스트 · 통계 제외", systemImage: "waveform")

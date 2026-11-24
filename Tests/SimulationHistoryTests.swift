@@ -3,6 +3,40 @@ import Combine
 @testable import MYMS
 
 final class SimulationHistoryTests: XCTestCase {
+    func testStatisticsSwitchSeparatesExerciseSimulationAndIMU() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 24, hour: 12))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        func record(_ reps: Int, source: String?, date: Date) -> WorkoutRecord {
+            var value = WorkoutRecord(workout: Workout(), reps: reps, sets: 0, seconds: 30, points: 0)
+            value.measurementSource = source
+            value.date = date
+            return value
+        }
+        let records = [record(4, source: nil, date: now),
+                       record(7, source: WorkoutRecord.simulationSource, date: now),
+                       record(3, source: WorkoutRecord.simulationSource, date: yesterday),
+                       record(99, source: "IMU 동작 테스트", date: now),
+                       record(0, source: WorkoutRecord.simulationSource, date: now),
+                       record(50, source: WorkoutRecord.simulationSource, date: now.addingTimeInterval(86400))]
+        XCTAssertEqual(WorkoutStatistics.Source.exercise.records(from: records).map(\.id), [records[0].id])
+        XCTAssertEqual(WorkoutStatistics.Source.simulation.records(from: records).map(\.id),
+                       [records[1].id, records[2].id, records[4].id, records[5].id])
+        XCTAssertTrue(WorkoutStatistics.Source.simulation.records(from: []).isEmpty)
+        let real = WorkoutStatistics(records: records, now: now, calendar: calendar)
+        XCTAssertEqual(real.week.reduce(0) { $0 + $1.reps }, 4)
+        XCTAssertEqual(real.personalBest, 4)
+        let demo = WorkoutStatistics(records: records, source: .simulation, now: now, calendar: calendar)
+        XCTAssertEqual(demo.week.reduce(0) { $0 + $1.reps }, 10)
+        XCTAssertEqual(demo.personalBest, 7)
+        XCTAssertEqual(demo.streak, 2)
+        let empty = WorkoutStatistics(records: [], source: .simulation, now: now, calendar: calendar)
+        XCTAssertEqual(empty.week.count, 7)
+        XCTAssertTrue(empty.week.allSatisfy { $0.reps == 0 })
+        XCTAssertEqual(empty.streak, 0)
+    }
+
     @MainActor func testEndingZeroRepSimulationSavesHistoryAcrossRestart() throws {
         let account = UUID()
         defer { try? WorkoutStore.deleteLocalData(for: account) }

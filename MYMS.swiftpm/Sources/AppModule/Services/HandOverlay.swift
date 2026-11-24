@@ -22,18 +22,6 @@ enum HandOverlay {
             for point in points.values {
                 context.fillEllipse(in: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2))
             }
-            if let wrist = points[0] {
-                let title = "\(hand.gesture.rawValue) · \(points.count)/21"
-                let font = UIFont.boldSystemFont(ofSize: max(16, size.width / 35))
-                let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
-                let textSize = (title as NSString).size(withAttributes: attributes)
-                let box = CGRect(x: max(0, min(wrist.x, size.width - textSize.width - 16)),
-                    y: max(0, min(wrist.y + 12, size.height - textSize.height - 12)),
-                    width: textSize.width + 16, height: textSize.height + 10)
-                context.setFillColor(UIColor.black.withAlphaComponent(0.75).cgColor)
-                context.fill(box)
-                (title as NSString).draw(at: CGPoint(x: box.minX + 8, y: box.minY + 5), withAttributes: attributes)
-            }
         }
     }
 }

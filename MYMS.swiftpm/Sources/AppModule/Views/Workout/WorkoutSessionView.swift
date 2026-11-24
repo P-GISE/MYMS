@@ -7,60 +7,58 @@ extension WorkoutHome {
         NavigationStack {
             GeometryReader { geometry in
                 let wide = geometry.size.width >= 760 && geometry.size.width > geometry.size.height && !typeSize.isAccessibilitySize
+                let previewHeight = wide
+                    ? max(100.0, geometry.size.height - 180)
+                    : max(80.0, geometry.size.height - workoutDetailsHeight - 240)
                 let inset: CGFloat = wide ? 28 : 16
                 let width = min(1400, max(0, geometry.size.width - inset * 2))
                 let controlsWidth: CGFloat = wide ? min(360, max(280, width * 0.31)) : width
 
-                ScrollView {
+                VStack(spacing: 0) {
                     if wide {
                         HStack(alignment: .top, spacing: 24) {
-                            cameraPanel(compact: false)
+                            cameraPanel(previewHeight: previewHeight)
                                 .frame(width: max(0, width - controlsWidth - 24))
-                            workoutDetails
-                                .frame(width: controlsWidth)
+                            VStack(spacing: 14) {
+                                workoutDetails
+                                if coach.hasSelectedWorkout { compactMeasurementSummary }
+                            }
+                            .frame(width: controlsWidth)
                         }
                         .padding(inset)
                         .frame(maxWidth: .infinity)
                     } else {
                         VStack(spacing: 20) {
-                            cameraPanel(compact: true)
                             workoutDetails
+                            cameraPanel(previewHeight: previewHeight)
+                            if coach.hasSelectedWorkout { compactMeasurementSummary }
                         }
                         .frame(width: width)
                         .padding(inset)
                         .frame(maxWidth: .infinity)
                     }
+                    Spacer(minLength: 0)
                 }
             }
             .background(MYMSStyle.canvas)
             .navigationTitle("운동")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
-    private func cameraPanel(compact: Bool) -> some View {
+    private func cameraPanel(previewHeight: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Toggle(isOn: $showsWorkoutCamera) {
                 Label("카메라 자세 보조", systemImage: "viewfinder")
                     .font(.title3.weight(.bold))
             }
             if showsWorkoutCamera && tab == .workout {
-                WorkoutCameraView()
+                WorkoutCameraView(previewHeight: previewHeight)
             } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "figure.stand")
-                        .font(.system(size: compact ? 30 : 54, weight: .light))
-                        .foregroundStyle(MYMSStyle.lime)
-                        .padding(compact ? 8 : 18)
-                        .background(MYMSStyle.lime.opacity(0.10), in: Circle())
-                        .accessibilityHidden(true)
-                    Text("전신과 손동작을 보려면 카메라를 켜세요.")
-                        .font(.subheadline.weight(.medium))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: compact ? 112 : 280)
-                .foregroundStyle(.white)
-                .background(MYMSStyle.ink, in: RoundedRectangle(cornerRadius: 16))
+                Label("전신·손동작을 확인할 때 켜세요.", systemImage: "figure.stand")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(16)
@@ -70,13 +68,19 @@ extension WorkoutHome {
     private var workoutDetails: some View {
         VStack(alignment: .leading, spacing: 14) {
             sessionResult
-            if coach.canSelect || !coach.hasSelectedWorkout { planSelectionPanel }
             if coach.hasSelectedWorkout {
                 if coach.phase != .finished { progressPanel }
                 sessionControls
-                measurementSummary
+            }
+            if !coach.hasSelectedWorkout { planSelectionPanel }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: WorkoutDetailsHeightKey.self, value: geometry.size.height)
             }
         }
+        .onPreferenceChange(WorkoutDetailsHeightKey.self) { workoutDetailsHeight = $0 }
     }
 
     private var planSelectionPanel: some View {
@@ -128,41 +132,24 @@ extension WorkoutHome {
         return coach.startBlockReason
     }
 
-    private var measurementSummary: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(coach.isSimulating ? "센서 없이 시연 중" : "횟수 측정 · \(coach.measurementMode.rawValue)",
-                  systemImage: "waveform.path.ecg")
-                .font(.headline)
-            if coach.isSimulating {
-                Text("종료하면 시연 기록으로 저장합니다. 포인트와 실제 운동 통계에서는 제외됩니다.")
-            } else {
-                Text(coach.connection)
-                if coach.measurementMode == .acceleration {
-                    Text(coach.acceleration.map { "\($0.formatted(.number.precision(.fractionLength(2)))) g" } ?? "IMU 데이터 대기 중")
-                } else {
-                    Text(coach.latestDistance.map { "\(($0 / 10).formatted(.number.precision(.fractionLength(1)))) cm" } ?? "유효 거리값 대기 중")
-                }
-                if coach.canSelect && coach.measurementMode == .distance {
-                    Text(coach.workout.exercise.placement)
-                }
-                if coach.phase == .calibrating {
-                    ProgressView(value: coach.calibrationProgress)
-                        .accessibilityLabel("시작 거리 측정 진행률")
-                }
-            }
+    private var compactMeasurementSummary: some View {
+        HStack(spacing: 12) {
+            Label(coach.isSimulating ? "센서 없이 시연 · 기록 저장 / 0 P" : coach.connection,
+                  systemImage: coach.isSimulating ? "play.rectangle" : "sensor.tag.radiowaves.forward")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
             Button { tab = .sensors } label: {
-                Label("센서 연결 및 설정", systemImage: "arrow.right.circle")
+                Label("센서 설정", systemImage: "slider.horizontal.3")
             }
             .buttonStyle(.bordered)
+            .font(.subheadline)
         }
-        .font(.subheadline)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .mymsCard()
+        .padding(.horizontal, 4)
     }
 
     private var progressPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(coach.phase.rawValue)
                 .font(.subheadline.bold()).foregroundStyle(MYMSStyle.lime)
             Text(coach.workout.exercise.rawValue).font(.title2.bold())
@@ -199,7 +186,7 @@ extension WorkoutHome {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
+        .padding(16)
         .foregroundStyle(.white)
         .background(MYMSStyle.ink, in: RoundedRectangle(cornerRadius: 24))
     }
@@ -217,7 +204,10 @@ extension WorkoutHome {
                     LabeledContent("획득 포인트", value: "\(saved.points) P")
                     Label(saved.isSimulation ? "시연 기록을 저장했습니다" : "운동 기록을 저장했습니다", systemImage: "checkmark.circle.fill")
                         .font(.subheadline).foregroundStyle(.green)
-                    Button { tab = .history } label: { actionLabel("기록 보기", icon: "clock.arrow.circlepath") }
+                    Button {
+                        historyStatisticsSource = saved.isSimulation ? .simulation : .exercise
+                        tab = .history
+                    } label: { actionLabel("기록 보기", icon: "clock.arrow.circlepath") }
                         .mymsPrimaryButton()
                 }
             }
@@ -277,38 +267,38 @@ extension WorkoutHome {
     }
 }
 
+private struct WorkoutDetailsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 320
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private struct WorkoutCameraView: View {
+    let previewHeight: CGFloat
     @Environment(\.scenePhase) private var scenePhase
     @State private var authorized = false
     @State private var checked = false
     @State private var failed = false
 
-    @State private var position = AVCaptureDevice.Position.front
     @State private var status = "자세 확인 중"
 
     var body: some View {
         VStack(spacing: 16) {
-            Picker("카메라", selection: $position) {
-                Text("전면").tag(AVCaptureDevice.Position.front)
-                Text("후면").tag(AVCaptureDevice.Position.back)
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: position) {
-                failed = false
-                status = "자세 확인 중"
-            }
             if authorized, scenePhase == .active, !failed {
-                WorkoutCameraPreview(position: position, onStatus: { status = $0 }) { failed = true }
-                    .id(position)
-                    .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                WorkoutCameraPreview(onStatus: { status = $0 }) { failed = true }
+                    .frame(height: previewHeight)
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .accessibilityLabel("카메라 미리보기")
             } else if failed {
-                ContentUnavailableView("카메라를 열 수 없어요", systemImage: "camera")
+                Label("카메라를 열 수 없어요", systemImage: "camera")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, minHeight: previewHeight)
             } else if checked && !authorized {
-                ContentUnavailableView("카메라 권한이 필요해요", systemImage: "camera",
-                    description: Text("설정에서 MYMS의 카메라 접근을 허용해 주세요."))
+                Label("설정에서 카메라 접근을 허용해 주세요.", systemImage: "camera")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, minHeight: previewHeight)
             } else if !checked {
                 ProgressView("카메라 준비 중")
             }
@@ -334,8 +324,14 @@ private struct WorkoutCameraView: View {
     }
 }
 
+enum WorkoutCameraDevice {
+    static func preferredFront() -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .front)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+    }
+}
+
 private struct WorkoutCameraPreview: UIViewRepresentable {
-    let position: AVCaptureDevice.Position
     let onStatus: (String) -> Void
     let onFailure: () -> Void
 
@@ -414,23 +410,18 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                     ctx.addLine(to: end)
                     ctx.strokePath()
                 }
-                let labeledJoints: Set<PoseJoint> = [.nose, .leftElbow, .rightElbow, .leftWrist, .rightWrist, .leftKnee, .rightKnee]
-                func drawDot(_ p: CGPoint, name: String?) {
+                func drawDot(_ p: CGPoint) {
                     let dot = CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12)
                     ctx.setFillColor(UIColor.systemYellow.cgColor)
                     ctx.fillEllipse(in: dot)
                     ctx.setStrokeColor(UIColor.black.cgColor)
                     ctx.setLineWidth(2)
                     ctx.strokeEllipse(in: dot)
-                    if let name {
-                        (name as NSString).draw(at: CGPoint(x: min(p.x + 10, size.width - 80), y: max(0, p.y - 22)),
-                            withAttributes: [.font: UIFont.boldSystemFont(ofSize: 17),
-                                .foregroundColor: UIColor.white, .strokeColor: UIColor.black, .strokeWidth: -3])
-                    }
+
                 }
                 for joint in PoseJoint.allCases {
                     guard let p = location(joint) else { continue }
-                    drawDot(p, name: labeledJoints.contains(joint) ? joint.title : nil)
+                    drawDot(p)
                 }
 
                 HandOverlay.draw(hands, in: ctx, size: size)
@@ -447,7 +438,7 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
             let handStatus: String
             if let handError { handStatus = "손 추적 오류 · \(handError)" }
             else if hands.isEmpty { handStatus = "손 감지 대기 · 손가락이 보이게 해 주세요" }
-            else { handStatus = "손 \(hands.count)개 · " + hands.map { $0.gesture.rawValue }.joined(separator: " / ") }
+            else { handStatus = "손 \(hands.count)개 감지" }
             let combinedStatus = status + "\n" + handStatus
             if ProcessInfo.processInfo.environment["MYMS_POSE_DIAGNOSTICS"] == "1", time - lastDiagnostic >= 1 {
                 lastDiagnostic = time
@@ -485,7 +476,8 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
 
     func makeUIView(context: Context) -> Preview {
         let view = Preview()
-        view.contentMode = .scaleAspectFit
+        view.contentMode = .scaleAspectFill
+        view.clipsToBounds = true
         view.backgroundColor = .black
         let camera = context.coordinator
         let reportFailure = { [weak view] in
@@ -494,7 +486,7 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 onFailure()
             }
         }
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) else {
+        guard let device = WorkoutCameraDevice.preferredFront() else {
             reportFailure()
             return view
         }
@@ -532,14 +524,15 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 }
                 if connection.isVideoMirroringSupported {
                     connection.automaticallyAdjustsVideoMirroring = false
-                    connection.isVideoMirrored = position == .front
+                    connection.isVideoMirrored = true
                 }
             }
             camera.onFrame = { [weak view] image, status in
                 DispatchQueue.main.async {
                     guard let view, view.active else { return }
                     view.image = image
-                    onStatus(status)
+                    let lens = device.deviceType == .builtInUltraWideCamera ? "초광각" : "1× · 초광각 미지원"
+                    onStatus("\(lens) · \(status)")
                 }
             }
             camera.session.startRunning()

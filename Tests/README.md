@@ -140,3 +140,7 @@ Xcode MYMS 스킴의 WorkoutPreparationTests 5개가 미선택 기본 운동 시
 SimulationHistoryTests는 다음을 검사합니다: 0회 시연 종료 후 저장·새 저장소에서 재조회·중복 완료 방지, 가상 1회로 목표를 채운 자동 완료 저장, 실제 파일 쓰기 실패 후 같은 완료 UUID로 재시도, 서버 결과 병합 시 로컬 시연 유지, 시연의 포인트/통계/일일 상한 제외. 시연 기록은 기기에만 남고 진행 중 복구/서버 업로드를 만들지 않습니다.
 
 2026-11-24 Xcode 계정 재인증과 아이패드 개발자 앱 신뢰 설정 후 실제 iPad에서 기존 14개와 신규 시연 기록 5개, 총 19개 테스트가 실패 없이 통과했습니다. 결과: `/tmp/MYMS-iPad-update/Logs/Test/Test-MYMS-2026.11.24_11-08-00-+0900.xcresult`. 실제 센서 하드웨어 실측은 이 테스트에 포함되지 않습니다.
+
+## 실제 운동 / 시연 통계 전환
+
+`SimulationHistoryTests.testStatisticsSwitchSeparatesExerciseSimulationAndIMU`는 실제 운동·시연·IMU 기록 분리, 주간 합계, 최다 횟수, 연속 시연일, 빈 데이터, 0회 및 미래 기록 제외를 검사합니다. 기존 코드에서 source 인자가 없어 실패하는 것을 확인한 뒤 구현했습니다. 2026-11-24 실제 iPad XCTest 총 21개 통과(`/tmp/MYMS-statistics-switch-tests.log`).
