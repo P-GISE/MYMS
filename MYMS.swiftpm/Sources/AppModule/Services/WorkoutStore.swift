@@ -243,7 +243,7 @@ final class WorkoutStore: ObservableObject {
             return true
         }
         var boundedRecord = record
-        boundedRecord.points = min(record.points, 300)
+        boundedRecord.points = record.isSimulation ? 0 : min(record.points, 300)
         guard boundedRecord.hasSafeStoredValues,
               progress == nil || progress?.id == record.id,
               (1...100).contains(record.workout.target), (1...10).contains(record.workout.sets),
@@ -268,7 +268,7 @@ final class WorkoutStore: ObservableObject {
             var entry = record
             let earned = records.filter { Calendar.current.isDate($0.date, inSameDayAs: entry.date) }
                 .reduce(0) { $0 + $1.points }
-            entry.points = min(entry.points, max(0, 300 - earned))
+            entry.points = entry.isSimulation ? 0 : min(entry.points, max(0, 300 - earned))
             records.insert(entry, at: 0)
             completedSessionIDs.insert(entry.id)
             progress = nil
@@ -306,17 +306,10 @@ final class WorkoutStore: ObservableObject {
             let remotePlans = try decoder.decode([PlanRow].self, from: await planData).map { try $0.workout() }
             let remoteRecords = try decoder.decode([SessionRow].self, from: await sessionData).map { try $0.record() }
             guard startRevision == revision, pending.isEmpty else { return }
-            let localByID = Dictionary(records.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             let beforeRefresh = snapshot()
             loading = true
             plans = remotePlans
-            records = remoteRecords.map { remote in
-                var record = remote
-                record.environment = localByID[record.id]?.environment
-                record.measurementSource = localByID[record.id]?.measurementSource
-                return record
-            } + records.filter { $0.measurementSource == "IMU 동작 테스트" }
-            records.sort { $0.date > $1.date }
+            records = Self.mergeRemoteRecords(remoteRecords, local: records)
             completedSessionIDs.formUnion(records.map(\.id))
             loading = false
             if !persist() { restore(beforeRefresh) }
@@ -328,6 +321,19 @@ final class WorkoutStore: ObservableObject {
     func retry() {
         guard persist() else { return }
         Task { await load() }
+    }
+
+    static func mergeRemoteRecords(_ remoteRecords: [WorkoutRecord], local: [WorkoutRecord]) -> [WorkoutRecord] {
+        let localByID = Dictionary(local.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let remoteIDs = Set(remoteRecords.map(\.id))
+        let remote = remoteRecords.map { value in
+            if let cached = localByID[value.id], cached.isLocalOnly { return cached }
+            var record = value
+            record.environment = localByID[record.id]?.environment
+            record.measurementSource = localByID[record.id]?.measurementSource
+            return record
+        }
+        return (remote + local.filter { $0.isLocalOnly && !remoteIDs.contains($0.id) }).sorted { $0.date > $1.date }
     }
 
     private func changedPlans(from previous: [Workout]) {
@@ -362,10 +368,10 @@ final class WorkoutStore: ObservableObject {
     private func enqueueRecordChanges(from previous: [WorkoutRecord]) throws {
         if cloudEnabled {
             let oldByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            for old in previous where old.measurementSource != "IMU 동작 테스트" && !records.contains(where: { $0.id == old.id }) {
+            for old in previous where !old.isLocalOnly && !records.contains(where: { $0.id == old.id }) {
                 pending.append(try Mutation(path: "/rest/v1/workout_sessions?id=eq.\(old.id.uuidString)", method: "DELETE", body: nil))
             }
-            for record in records where record.measurementSource != "IMU 동작 테스트" {
+            for record in records where !record.isLocalOnly {
                 if let old = oldByID[record.id] {
                     if old.note != record.note {
                         pending.append(try Mutation(path: "/rest/v1/workout_sessions?id=eq.\(record.id.uuidString)",

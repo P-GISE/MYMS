@@ -3,102 +3,204 @@ import Charts
 
 struct SensorDashboard: View {
     @ObservedObject var coach: Coach
+    let showWorkout: () -> Void
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Bluetooth") {
-                    SensorConnectionCard(coach: coach)
-                    Text("거리 센서 없이도 내장 센서를 확인할 수 있습니다.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("운동 측정 설정") {
-            Picker("측정 방식", selection: Binding(
-                get: { coach.measurementMode },
-                set: { coach.setMeasurementMode($0) }
-            )) {
-                ForEach(Coach.MeasurementMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
+            GeometryReader { geometry in
+                let wide = geometry.size.width >= 800 && !typeSize.isAccessibilitySize
+                let layout = wide
+                    ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
+                    : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+                ScrollView {
+                    layout {
+                        VStack(alignment: .leading, spacing: 16) {
+                            SensorConnectionCard(coach: coach)
+                            measurementSettings
+                        }
+                        .frame(maxWidth: .infinity)
+                        VStack(alignment: .leading, spacing: 16) {
+                            accelerationPanel
+                            calibrationPanel
+                            environmentPanel
+                            boardControls
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: 1180)
+                    .padding(wide ? 24 : 16)
+                    .frame(maxWidth: .infinity)
                 }
             }
-            .disabled(!coach.canSelect || coach.isSimulating)
+            .background(MYMSStyle.canvas)
+            .navigationTitle("센서")
+        }
+    }
+
+    private var measurementSettings: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sensorHeading("운동 측정", icon: "waveform.path.ecg")
+            LabeledContent("측정 방식") {
+                Picker("측정 방식", selection: Binding(
+                    get: { coach.measurementMode }, set: { coach.setMeasurementMode($0) }
+                )) {
+                    ForEach(Coach.MeasurementMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(!coach.canSelect || coach.isSimulating)
+            }
             if coach.measurementMode == .acceleration {
-                Text("보드를 손에 들고 움직여 코치 흐름을 시험합니다. 고정된 보드로 사람의 운동을 측정할 수 없으며, 이 기록에는 포인트가 적립되지 않습니다.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                sensorHint("보드를 손에 들고 움직여 동작을 시험하세요. 고정된 보드로는 운동을 측정할 수 없습니다. IMU 테스트는 포인트를 지급하지 않습니다.")
             }
             if coach.canSelect || coach.isSimulating {
+                Divider()
                 Toggle("센서 없이 시연", isOn: Binding(
-                    get: { coach.isSimulating },
-                    set: { coach.setSimulation($0) }
+                    get: { coach.isSimulating }, set: { coach.setSimulation($0) }
                 ))
                 .disabled(!coach.canSelect)
+                if coach.isSimulating {
+                    sensorHint("운동 탭에서 가상 동작을 입력할 수 있습니다. 종료한 시연은 이 기기의 기록에 남습니다.")
+                }
             }
+            if coach.canStartWorkout {
+                Button(action: showWorkout) {
+                    Label("운동 화면으로 이동", systemImage: "arrow.right")
+                        .frame(maxWidth: .infinity)
+                }
+                .mymsPrimaryButton()
+                .controlSize(.large)
+            }
+        }
+        .padding(18)
+        .mymsCard()
+    }
 
+    private var accelerationPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sensorHeading("가속도", icon: "waveform")
+            LabeledContent("최근 10초", value: formatted(coach.acceleration, unit: "g"))
+                .monospacedDigit()
+            if coach.accelerationHistory.isEmpty {
+                Label("보드를 연결하면 측정값을 표시합니다.", systemImage: "clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 76)
+                    .background(MYMSStyle.canvas, in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                Chart(coach.accelerationHistory) { sample in
+                    LineMark(x: .value("시간", sample.date), y: .value("가속도", sample.magnitude))
+                        .foregroundStyle(MYMSStyle.accent)
                 }
-                Section("IMU · 최근 10초") {
-                    LabeledContent("가속도 크기", value: formatted(coach.acceleration, unit: "g"))
-                    if coach.accelerationHistory.isEmpty {
-                        ContentUnavailableView("가속도 수신 대기", systemImage: "waveform.path.ecg",
-                                               description: Text("보드를 연결한 후 움직여 변화를 확인하세요."))
-                    } else {
-                        Chart(coach.accelerationHistory) { sample in
-                            LineMark(x: .value("시간", sample.date), y: .value("가속도", sample.magnitude))
-                        }
-                        .chartYAxisLabel("g")
-                        .frame(height: 180)
-                        .accessibilityLabel("최근 가속도 이력 그래프")
-                    }
-                    Text("정지 상태는 약 1g입니다. 보드를 기울이기만 하면 크기 변화는 작을 수 있습니다. 운동 시험은 운동 탭의 IMU 동작 테스트에서 진행하세요.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("밝기") {
+                .chartYAxisLabel("g")
+                .frame(height: 140)
+                .accessibilityLabel("최근 10초의 가속도 변화")
+            }
+            sensorHint("정지 상태는 약 1g입니다. 보드를 기울이기만 하면 변화가 작을 수 있습니다.")
+        }
+        .padding(18)
+        .mymsCard()
+    }
+
+    private var calibrationPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sensorHeading("환경 센서 보정", icon: "slider.horizontal.3")
+            DisclosureGroup("밝기") {
+                VStack(alignment: .leading, spacing: 10) {
                     LabeledContent("밝기 원시값", value: formatted(coach.environment.brightnessRaw, unit: "count"))
-                    LabeledContent("밝기 비교", value: coach.environment.brightnessDescription)
                     LabeledContent("저장된 기준값", value: formatted(coach.environment.brightnessReference, unit: "count"))
+                    LabeledContent("밝기 비교", value: coach.environment.brightnessDescription)
+                    sensorHint("센서 앞을 가리지 말고 밝은 곳에서 설정하세요. 원시값은 조도(lux)가 아니며, 기준의 25% 이하면 ‘기준보다 어두움’으로 표시합니다.")
                     Button("현재 밝기를 기준으로 설정") { coach.calibrateBrightness() }
+                        .buttonStyle(.bordered)
                         .disabled(!coach.canCalibrateBrightness)
-                    Text("센서 앞을 가리지 않고, 비교 기준으로 삼을 밝은 환경에서 설정하세요. 원시값은 조도(lux)가 아니며, 기준값의 25% 이하를 ‘기준보다 어두움’으로 표시합니다.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("바닥 경사") {
+                }.padding(.vertical, 8)
+            }
+            Divider()
+            DisclosureGroup("바닥 경사") {
+                VStack(alignment: .leading, spacing: 10) {
                     LabeledContent("기준면과의 각도", value: formatted(coach.environment.inclineDegrees, unit: "°"))
                     LabeledContent("경사 비교", value: coach.environment.inclineDescription)
+                    sensorHint("수평면에서 보정한 뒤 운동할 바닥에 보드를 같은 면으로 놓고 2초 이상 기다리세요. 손에 들거나 움직일 때는 바닥 경사를 측정할 수 없습니다. 초기 구분 기준은 3°입니다.")
                     Button("수평 기준 보정") { coach.calibrateFloor() }
+                        .buttonStyle(.bordered)
                         .disabled(!coach.canCalibrateFloor)
                     if coach.isCalibratingFloor {
                         ProgressView("수평 기준 측정 중 · 움직이지 마세요", value: coach.floorCalibrationProgress)
                     }
-                    Text("수평이 확인된 안정적인 면에 보드를 놓고 보정하세요. 보정 후 운동할 바닥에 보드를 같은 면으로 놓고 2초 이상 정지시키세요. 손에 들거나 움직일 때의 각도는 바닥 경사가 아닙니다. 3° 이하 구분은 초기 비교 기준입니다.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Text("재연결하면 밝기와 수평 기준을 다시 설정하세요.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Section("직접 선택하는 환경") {
+                }.padding(.vertical, 8)
+            }
+            sensorHint("보드를 다시 연결하면 밝기와 수평 기준을 다시 설정하세요.")
+        }
+        .padding(18)
+        .mymsCard()
+    }
+
+    private var environmentPanel: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                LabeledContent("운동기구") {
                     Picker("운동기구", selection: $coach.equipment) {
                         ForEach(WorkoutEquipment.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
+                    .labelsHidden()
+                }
+                LabeledContent("장소") {
                     Picker("장소", selection: $coach.place) {
                         ForEach(WorkoutPlace.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
+                    .labelsHidden()
+                }
+                LabeledContent("신발") {
                     Picker("신발", selection: $coach.footwear) {
                         ForEach(WorkoutFootwear.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                    Text("밝기·경사와 선택한 환경은 운동 시작 시 기록에 담습니다. 운동 중에는 선택을 변경할 수 없습니다.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    .labelsHidden()
                 }
-                .disabled(!coach.canSelect)
-                Section("손 제스처와 제어") {
-                    LabeledContent("최근 방향", value: coach.lastGesture)
-                    LabeledContent("근접 버튼", value: coach.proximityPressed ? "눌림" : "대기")
+                sensorHint("선택한 환경은 운동 시작 시 기록됩니다. 운동 중에는 바꿀 수 없습니다.")
+            }
+            .pickerStyle(.menu)
+            .disabled(!coach.canSelect)
+            .padding(.top, 12)
+        } label: {
+            sensorHeading("운동 환경", icon: "mappin.and.ellipse")
+        }
+        .padding(18)
+        .mymsCard()
+    }
+
+    private var boardControls: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                LabeledContent("최근 방향", value: coach.lastGesture)
+                LabeledContent("근접 버튼", value: coach.proximityPressed ? "눌림" : "대기")
+                if coach.isSimulating && coach.connected {
                     Toggle("보드 LED", isOn: Binding(get: { coach.ledOn }, set: { coach.setLED($0) }))
                         .disabled(!coach.canControlLED)
                     if let error = coach.deviceError { Text(error).foregroundStyle(.red) }
-                    Text("오른쪽: 시작·재개 / 왼쪽: 일시정지 / 위: 다음 세트 / 아래: 일시정지 중 종료. 유효한 측정값이 있어야 운동을 시작할 수 있습니다.")
-                        .font(.footnote).foregroundStyle(.secondary)
                 }
+                sensorHint("오른쪽은 시작·재개, 왼쪽은 일시정지, 위쪽은 다음 세트입니다. 일시정지 중 아래쪽으로 움직이면 운동을 종료합니다.")
             }
-            .navigationTitle("센서")
+            .padding(.top, 12)
+        } label: {
+            sensorHeading("보드 제스처", icon: "hand.raised")
         }
+        .padding(18)
+        .mymsCard()
+    }
+
+    private func sensorHeading(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func sensorHint(_ message: String) -> some View {
+        Text(message).font(.footnote).foregroundStyle(.secondary)
     }
 
     private func formatted(_ value: Double?, unit: String) -> String {
@@ -111,7 +213,9 @@ struct SensorConnectionCard: View {
     @State private var choosingDevice = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("보드 연결", systemImage: "antenna.radiowaves.left.and.right")
+                .font(.headline).accessibilityAddTraits(.isHeader)
             if coach.isSimulating {
                 Label("시연 모드 · 가상 센서", systemImage: "waveform")
                     .font(.headline)
@@ -122,11 +226,14 @@ struct SensorConnectionCard: View {
                     if isBusy {
                         ProgressView().accessibilityLabel(title)
                     } else {
-                        Image(systemName: statusIcon).foregroundStyle(statusColor)
-                            .font(.title2)
+                        Image(systemName: statusIcon)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 44, height: 44)
+                            .background(MYMSStyle.canvas, in: Circle())
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(title).font(.headline).foregroundStyle(statusColor)
+                        Text(title).font(.title3.bold())
                         Text(coach.connection).font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
@@ -188,13 +295,13 @@ struct SensorConnectionCard: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(.footnote).foregroundStyle(.orange)
                 }
-                Text("아두이노 ID로 보드를 구분합니다. 처음 연결할 때는 LED도 켜서 내 보드가 맞는지 확인하세요.")
+                Text("처음 연결할 때는 아두이노 ID와 보드의 LED를 확인하세요.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .padding(18)
+        .mymsCard()
         .sheet(isPresented: $choosingDevice) { devicePicker }
     }
 
@@ -205,7 +312,7 @@ struct SensorConnectionCard: View {
         } label: {
             Label(coach.selectedDevice == nil ? "기기 선택" : "다른 기기 선택", systemImage: "list.bullet")
         }
-        .buttonStyle(.borderedProminent)
+        .mymsPrimaryButton()
         .disabled(!coach.canChooseDevice)
         if coach.selectedDevice != nil {
             if !coach.connected, !isBusy, let device = coach.selectedDevice {
@@ -305,7 +412,7 @@ struct SensorConnectionCard: View {
 
     private var statusColor: Color {
         switch coach.connectionStage {
-        case .receiving: return .green
+        case .receiving: return MYMSStyle.accent
         case .unavailable, .failed, .stale: return .orange
         default: return .primary
         }

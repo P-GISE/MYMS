@@ -13,7 +13,7 @@ struct WorkoutStatistics {
     let personalBest: Int
 
     init(records: [WorkoutRecord], now: Date = Date(), calendar: Calendar = .current) {
-        let exerciseRecords = records.filter { $0.measurementSource != "IMU 동작 테스트" && $0.date <= now && $0.reps > 0 }
+        let exerciseRecords = records.filter { !$0.isLocalOnly && $0.date <= now && $0.reps > 0 }
         let totals = Dictionary(grouping: exerciseRecords, by: { calendar.startOfDay(for: $0.date) })
             .mapValues { $0.reduce(0) { $0 + $1.reps } }
         let today = calendar.startOfDay(for: now)
@@ -38,18 +38,37 @@ struct WorkoutStatisticsView: View {
 
     var body: some View {
         let stats = WorkoutStatistics(records: records)
-        VStack(alignment: .leading, spacing: 12) {
-            Text("이번 주 운동 횟수").font(.headline)
-            Chart(stats.week) { day in
-                BarMark(x: .value("날짜", day.date, unit: .day), y: .value("횟수", day.reps))
+        let weeklyReps = stats.week.reduce(0) { $0 + $1.reps }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Label("이번 주 유효 횟수", systemImage: "chart.bar.fill")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Text("\(weeklyReps)회")
+                    .font(.largeTitle.bold()).monospacedDigit()
             }
-            .chartXAxis { AxisMarks(values: .stride(by: .day)) { _ in AxisValueLabel(format: .dateTime.weekday(.abbreviated)) } }
-            .frame(height: 160)
+            .accessibilityElement(children: .combine)
+
+            Chart(stats.week) { day in
+                BarMark(x: .value("날짜", day.date, unit: .day),
+                        y: .value("횟수", day.reps), width: .ratio(0.55))
+                    .foregroundStyle(.tint)
+                    .cornerRadius(4)
+                    .accessibilityLabel(day.date.formatted(.dateTime.weekday(.wide)))
+                    .accessibilityValue("\(day.reps)회")
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated))
+                }
+            }
+            .frame(height: 132)
+
+            Divider()
             LabeledContent("연속 운동일", value: "\(stats.streak)일")
-            LabeledContent("한 세션 최다 횟수 (PR)", value: "\(stats.personalBest)회")
-            Text("연속일은 오늘 또는 어제부터 계산합니다. IMU 동작 테스트는 운동 통계에서 제외합니다.")
+            LabeledContent("한 번에 가장 많이 한 횟수", value: "\(stats.personalBest)회")
+            Text("연속 운동일은 오늘이나 어제부터 셉니다. 시연과 IMU 동작 테스트는 통계에서 제외됩니다.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
     }
 }

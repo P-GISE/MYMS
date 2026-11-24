@@ -55,6 +55,8 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     @Published private(set) var restInterrupted = false
     @Published private(set) var shallow = false
     @Published private(set) var workout = Workout()
+    @Published private(set) var selectedWorkoutID: UUID?
+    var hasSelectedWorkout: Bool { selectedWorkoutID == workout.id }
     @Published private(set) var result: WorkoutRecord?
     @Published private(set) var summary: WorkoutRecord?
     @Published private(set) var latestDistance: Double?
@@ -185,12 +187,42 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
 
     var canSelect: Bool { (phase == .ready || phase == .finished) && recoveryCandidate == nil && sessionID == nil }
 
+    var startBlockReason: String? {
+        guard hasSelectedWorkout else { return "운동 계획에서 운동을 추가한 뒤, 시작할 운동을 선택해 주세요." }
+        if let persistenceError { return persistenceError }
+        if recoveryCandidate != nil { return "진행 중이던 운동을 복구하거나 버린 뒤 시작해 주세요." }
+        guard canSelect else { return "진행 중인 운동을 먼저 종료해 주세요." }
+        guard workout.isValid else { return "운동 계획의 횟수·세트·휴식 설정을 확인해 주세요." }
+        guard isSimulating || recordingAvailable else { return "운동 기록을 불러온 뒤 시작할 수 있습니다." }
+        guard canMeasure else {
+            if isSimulating { return "시연 측정값을 준비하고 있습니다." }
+            if !connected { return "센서 탭에서 아두이노를 연결하고 측정값 수신을 확인해 주세요." }
+            return measurementMode == .distance
+                ? "유효한 거리값이 없습니다. 센서 탭에서 거리 센서의 연결과 배치를 확인해 주세요."
+                : "유효한 IMU 값이 없습니다. 센서 탭에서 측정값 수신을 확인해 주세요."
+        }
+        return nil
+    }
+
+    var canStartWorkout: Bool { startBlockReason == nil }
+
     func select(_ plan: Workout) {
         guard canSelect, plan.isValid else { return }
         workout = plan
+        selectedWorkoutID = plan.id
+        summary = nil
         reps = 0
         set = 1
         phase = .ready
+    }
+
+    func reconcilePlans(_ plans: [Workout]) {
+        guard canSelect, let selectedWorkoutID else { return }
+        if let plan = plans.first(where: { $0.id == selectedWorkoutID }), plan.isValid {
+            if workout != plan { workout = plan }
+        } else {
+            self.selectedWorkoutID = nil
+        }
     }
 
     func finish() {
@@ -198,8 +230,8 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         restTimer?.invalidate()
         stopClock()
         resetMotion()
-        if totalReps == 0 {
-            guard isSimulating || onDiscard?() == true else { persistenceFailed(); return }
+        if totalReps == 0 && !isSimulating {
+            guard onDiscard?() == true else { persistenceFailed(); return }
             sessionID = nil
             persistenceError = nil
             phase = .finished
@@ -207,23 +239,20 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         }
         let completionID: UUID
         if let sessionID { completionID = sessionID }
-        else if isSimulating { completionID = UUID() }
         else { persistenceFailed(); return }
         let completed = pendingCompletion ?? WorkoutRecord(id: completionID, workout: workout,
                                reps: totalReps, sets: completedSets, seconds: elapsedSeconds,
-                               points: measurementMode == .acceleration ? 0 : totalReps * workout.level.rawValue + completedSets * 5,
+                               points: isSimulating || measurementMode == .acceleration ? 0 : totalReps * workout.level.rawValue + completedSets * 5,
                                environment: sessionEnvironment,
-                               measurementSource: measurementMode.rawValue)
-        if !isSimulating {
-            pendingCompletion = completed
-            guard onComplete?(completed) == true else { persistenceFailed(); return }
-        }
+                               measurementSource: isSimulating ? WorkoutRecord.simulationSource : measurementMode.rawValue)
+        pendingCompletion = completed
+        guard onComplete?(completed) == true else { persistenceFailed(); return }
         pendingCompletion = nil
         sessionID = nil
         persistenceError = nil
         phase = .finished
         summary = completed
-        if !isSimulating { result = completed }
+        result = completed
     }
 
     func offerRecovery(_ progress: WorkoutProgress) {
@@ -247,6 +276,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             return false
         }
         workout = saved.workout
+        selectedWorkoutID = saved.workout.id
         sessionID = saved.id
         sessionStart = saved.startedAt
         elapsedAccumulated = Double(saved.elapsedSeconds)
@@ -952,10 +982,10 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
 
     func gesture(_ direction: UInt8) {
         expireTelemetry()
-        guard recoveryCandidate == nil, pendingCompletion == nil else { return }
+        guard hasSelectedWorkout, recoveryCandidate == nil, pendingCompletion == nil else { return }
         switch (direction, phase) {
         case (4, .ready), (4, .finished):
-            guard canMeasure, isSimulating || recordingAvailable else { return }
+            guard canStartWorkout else { return }
             isCalibratingFloor = false
             sessionEnvironment = environment
             sessionEnvironment?.measuredAt = Date()
@@ -971,7 +1001,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             sessionStart = Date()
             elapsedAccumulated = 0
             clockBegan = nil
-            sessionID = isSimulating ? nil : UUID()
+            sessionID = UUID()
             restSeconds = workout.rest
             calibrate()
         case (4, .paused):

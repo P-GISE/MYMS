@@ -99,6 +99,7 @@ struct Workout: Codable, Identifiable, Equatable {
 }
 
 struct WorkoutRecord: Codable, Identifiable {
+    static let simulationSource = "센서 없이 시연"
     var id = UUID()
     var workout: Workout
     var date = Date()
@@ -110,11 +111,14 @@ struct WorkoutRecord: Codable, Identifiable {
     var environment: SensorEnvironment? = nil
     var measurementSource: String? = nil
 
+    var isSimulation: Bool { measurementSource == Self.simulationSource }
+    var isLocalOnly: Bool { isSimulation || measurementSource == "IMU 동작 테스트" }
+
     /// Bounds protect legacy history as well as server rows from overflow/corrupt values.
     /// Completion performs the stricter per-workout rep/set consistency checks.
     var hasSafeStoredValues: Bool {
         workout.isValid && (0...1000).contains(reps) && (0...workout.sets).contains(sets)
-            && (0..<(Int.max / 2)).contains(seconds) && (0...300).contains(points)
+            && (0..<(Int.max / 2)).contains(seconds) && (0...300).contains(points) && (!isSimulation || points == 0)
             && date.timeIntervalSinceReferenceDate.isFinite && (Date.distantPast...Date.distantFuture).contains(date)
     }
 }

@@ -17,7 +17,7 @@ struct WorkoutHome: View {
         self.accounts = accounts
         _store = StateObject(wrappedValue: WorkoutStore(accountID: account.id, accounts: accounts))
     }
-    @State var tab = 0
+    @State var tab: WorkoutDestination = .plans
     @State var showsWorkoutCamera = false
     @State var editing: Workout?
     @State var guide: Workout?
@@ -25,14 +25,8 @@ struct WorkoutHome: View {
     @State var deletingRecord: WorkoutRecord?
 
     var body: some View {
-            TabView(selection: $tab) {
-                plans.tabItem { Label("운동 계획", systemImage: "list.bullet") }.tag(0)
-                session.tabItem { Label("운동", systemImage: "figure.strengthtraining.traditional") }.tag(1)
-                history.tabItem { Label("기록", systemImage: "clock") }.tag(2)
-                settings.tabItem { Label("설정", systemImage: "gearshape") }.tag(3)
-                SensorDashboard(coach: coach).tabItem { Label("센서", systemImage: "waveform.path.ecg") }.tag(4)
-            }
-            .tint(Color(red: 0.16, green: 0.62, blue: 0.42))
+        navigation
+            .tint(MYMSStyle.accent)
             .task {
                 coach.onCheckpoint = { [store] progress in
                     MainActor.assumeIsolated { store.updateProgress(progress) }
@@ -57,17 +51,27 @@ struct WorkoutHome: View {
                 coach.recordingAvailable = loaded
                 if loaded, coach.canSelect, let progress = store.progress { coach.offerRecovery(progress) }
             }
+            .onChange(of: store.plans, initial: true) { _, plans in
+                coach.reconcilePlans(plans)
+            }
+            .onChange(of: coach.phase) { _, _ in
+                coach.reconcilePlans(store.plans)
+            }
             .safeAreaInset(edge: .top) {
                 VStack(spacing: 0) {
                     if let error = coach.persistenceError ?? store.localError ?? store.syncError {
-                        HStack {
+                        HStack(alignment: .center, spacing: 12) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(.orange).accessibilityHidden(true)
                             Text(error).font(.footnote)
                             Spacer()
                             Button("다시 시도") {
                                 if coach.retryPersistence() { store.retry() }
                             }
+                            .buttonStyle(.bordered)
                         }
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
                         .background(.regularMaterial)
                     } else if !store.loaded {
                         ProgressView("운동 데이터 불러오는 중").padding()
@@ -85,6 +89,46 @@ struct WorkoutHome: View {
             }
     }
 
+    @ViewBuilder
+    private var navigation: some View {
+        if #available(iOS 18.0, *) {
+            TabView(selection: $tab) {
+                ForEach(WorkoutDestination.allCases) { destination in
+                    Tab(destination.title, systemImage: destination.symbol, value: destination) {
+                        page(for: destination)
+                    }
+                }
+            }
+            .tabViewStyle(.sidebarAdaptable)
+            .tabViewSidebarHeader {
+                MYMSWordmark()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(MYMSStyle.ink, in: RoundedRectangle(cornerRadius: 14))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            TabView(selection: $tab) {
+                ForEach(WorkoutDestination.allCases) { destination in
+                    page(for: destination)
+                        .tabItem { Label(destination.title, systemImage: destination.symbol) }
+                        .tag(destination)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func page(for destination: WorkoutDestination) -> some View {
+        switch destination {
+        case .plans: plans
+        case .workout: session
+        case .history: history
+        case .sensors: SensorDashboard(coach: coach) { tab = .workout }
+        case .settings: settings
+        }
+    }
+
     private func recoveryCard(_ progress: WorkoutProgress) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("진행 중이던 운동이 있습니다", systemImage: "arrow.counterclockwise")
@@ -92,7 +136,7 @@ struct WorkoutHome: View {
             Text("\(progress.workout.exercise.rawValue) · \(progress.measurementSource)")
             Text("세트 \(progress.set) / \(progress.workout.sets) · 현재 \(progress.reps) / \(progress.workout.target)회 · 누적 \(progress.totalReps)회")
                 .font(.subheadline).monospacedDigit()
-            Text("복구 후 센서를 연결하고 운동을 재개하세요. 휴식 중이었다면 남은 휴식 재개 또는 다음 세트를 눌러주세요. 앱이 꺼져 있거나 센서 연결이 끊긴 동안의 동작은 집계되지 않습니다.")
+            Text("이어서 하려면 복구 후 센서를 연결하세요. 중단 중의 동작은 집계되지 않습니다.")
                 .font(.footnote).foregroundStyle(.secondary)
             ViewThatFits(in: .horizontal) {
                 HStack { recoveryButtons }
@@ -106,12 +150,38 @@ struct WorkoutHome: View {
 
     @ViewBuilder
     private var recoveryButtons: some View {
-        Button("복구") {
-            if coach.restoreRecovery() { tab = 1 }
+        Button("운동 복구") {
+            if coach.restoreRecovery() { tab = .workout }
         }
-        .buttonStyle(.borderedProminent)
+        .mymsPrimaryButton()
         .disabled(!store.loaded || coach.persistenceError != nil)
         Button("진행 기록 버리기", role: .destructive) { confirmProgressDiscard = true }
             .buttonStyle(.bordered)
+    }
+}
+
+enum WorkoutDestination: CaseIterable, Identifiable {
+    case plans, workout, history, sensors, settings
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .plans: "운동 계획"
+        case .workout: "운동"
+        case .history: "기록"
+        case .sensors: "센서"
+        case .settings: "설정"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .plans: "list.clipboard"
+        case .workout: "figure.strengthtraining.traditional"
+        case .history: "clock.arrow.circlepath"
+        case .sensors: "sensor.tag.radiowaves.forward"
+        case .settings: "gearshape"
+        }
     }
 }

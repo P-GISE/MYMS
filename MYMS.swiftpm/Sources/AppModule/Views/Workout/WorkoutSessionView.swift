@@ -6,15 +6,15 @@ extension WorkoutHome {
     var session: some View {
         NavigationStack {
             GeometryReader { geometry in
-                let wide = geometry.size.width >= 780 && !typeSize.isAccessibilitySize
+                let wide = geometry.size.width >= 760 && geometry.size.width > geometry.size.height && !typeSize.isAccessibilitySize
                 let inset: CGFloat = wide ? 28 : 16
                 let width = min(1400, max(0, geometry.size.width - inset * 2))
-                let controlsWidth: CGFloat = wide ? min(340, width * 0.3) : width
+                let controlsWidth: CGFloat = wide ? min(360, max(280, width * 0.31)) : width
 
                 ScrollView {
                     if wide {
                         HStack(alignment: .top, spacing: 24) {
-                            cameraPanel
+                            cameraPanel(compact: false)
                                 .frame(width: max(0, width - controlsWidth - 24))
                             workoutDetails
                                 .frame(width: controlsWidth)
@@ -23,7 +23,7 @@ extension WorkoutHome {
                         .frame(maxWidth: .infinity)
                     } else {
                         VStack(spacing: 20) {
-                            cameraPanel
+                            cameraPanel(compact: true)
                             workoutDetails
                         }
                         .frame(width: width)
@@ -32,44 +32,109 @@ extension WorkoutHome {
                     }
                 }
             }
+            .background(MYMSStyle.canvas)
             .navigationTitle("운동")
         }
     }
 
-    private var cameraPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
+    private func cameraPanel(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             Toggle(isOn: $showsWorkoutCamera) {
-                Label("카메라 자세 보조", systemImage: "figure.stand")
-                    .font(.title2.bold())
+                Label("카메라 자세 보조", systemImage: "viewfinder")
+                    .font(.title3.weight(.bold))
             }
-            if showsWorkoutCamera && tab == 1 {
+            if showsWorkoutCamera && tab == .workout {
                 WorkoutCameraView()
             } else {
-                ContentUnavailableView("내 자세를 크게 확인하세요", systemImage: "camera",
-                    description: Text("카메라 자세 보조를 켜면 영상과 관절 표시를 확인할 수 있습니다."))
-                    .frame(maxWidth: .infinity, minHeight: 280)
+                VStack(spacing: 12) {
+                    Image(systemName: "figure.stand")
+                        .font(.system(size: compact ? 30 : 54, weight: .light))
+                        .foregroundStyle(MYMSStyle.lime)
+                        .padding(compact ? 8 : 18)
+                        .background(MYMSStyle.lime.opacity(0.10), in: Circle())
+                        .accessibilityHidden(true)
+                    Text("전신과 손동작을 보려면 카메라를 켜세요.")
+                        .font(.subheadline.weight(.medium))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, minHeight: compact ? 112 : 280)
+                .foregroundStyle(.white)
+                .background(MYMSStyle.ink, in: RoundedRectangle(cornerRadius: 16))
             }
         }
-        .padding(20)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .padding(16)
+        .mymsCard()
     }
 
     private var workoutDetails: some View {
-        VStack(spacing: 16) {
-            progressPanel
-            sessionControls
-            measurementSummary
+        VStack(alignment: .leading, spacing: 14) {
             sessionResult
+            if coach.canSelect || !coach.hasSelectedWorkout { planSelectionPanel }
+            if coach.hasSelectedWorkout {
+                if coach.phase != .finished { progressPanel }
+                sessionControls
+                measurementSummary
+            }
         }
+    }
+
+    private var planSelectionPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !store.loaded {
+                ProgressView("운동 계획을 불러오는 중")
+            } else if coach.recoveryCandidate != nil {
+                Label("먼저 진행 중인 운동을 복구하거나 버려 주세요.", systemImage: "arrow.counterclockwise")
+            } else if store.plans.isEmpty {
+                Label("아직 추가한 운동이 없어요", systemImage: "list.bullet.clipboard")
+                    .font(.headline)
+                Text("횟수와 세트를 정한 뒤 운동을 시작하세요.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button {
+                    tab = .plans
+                    editing = Workout()
+                } label: {
+                    Label("운동 계획 추가", systemImage: "plus")
+                }
+                .mymsPrimaryButton()
+            } else {
+                Text(coach.hasSelectedWorkout ? "선택한 운동" : "운동할 계획을 선택하세요")
+                    .font(.headline)
+                Picker("운동 선택", selection: Binding<UUID?>(
+                    get: { coach.selectedWorkoutID },
+                    set: { id in
+                        guard let id, let plan = store.plans.first(where: { $0.id == id }) else { return }
+                        coach.select(plan)
+                    }
+                )) {
+                    Text("선택하세요").tag(nil as UUID?).disabled(true)
+                    ForEach(store.plans) { plan in
+                        Text("\(plan.exercise.rawValue) · \(plan.target)회 × \(plan.sets)세트")
+                            .tag(Optional(plan.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(!coach.canSelect)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .mymsCard()
+    }
+
+    private var workoutStartIssue: String? {
+        if !store.loaded { return "운동 계획과 기록을 불러온 뒤 시작할 수 있습니다." }
+        if let error = store.localError { return error }
+        return coach.startBlockReason
     }
 
     private var measurementSummary: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(coach.isSimulating ? "센서 없이 시연 중" : coach.measurementMode.rawValue,
+            Label(coach.isSimulating ? "센서 없이 시연 중" : "횟수 측정 · \(coach.measurementMode.rawValue)",
                   systemImage: "waveform.path.ecg")
                 .font(.headline)
             if coach.isSimulating {
-                Text("시연 기록과 포인트는 저장되지 않습니다.")
+                Text("종료하면 시연 기록으로 저장합니다. 포인트와 실제 운동 통계에서는 제외됩니다.")
             } else {
                 Text(coach.connection)
                 if coach.measurementMode == .acceleration {
@@ -85,7 +150,7 @@ extension WorkoutHome {
                         .accessibilityLabel("시작 거리 측정 진행률")
                 }
             }
-            Button { tab = 4 } label: {
+            Button { tab = .sensors } label: {
                 Label("센서 연결 및 설정", systemImage: "arrow.right.circle")
             }
             .buttonStyle(.bordered)
@@ -93,19 +158,31 @@ extension WorkoutHome {
         .font(.subheadline)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .mymsCard()
     }
 
     private var progressPanel: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(coach.phase.rawValue)
+                .font(.subheadline.bold()).foregroundStyle(MYMSStyle.lime)
             Text(coach.workout.exercise.rawValue).font(.title2.bold())
             Text("\(coach.workout.level.title) · 세트 \(coach.set) / \(coach.workout.sets)")
-            Text("\(coach.reps) / \(coach.workout.target)")
-                .font(.system(size: repFontSize, weight: .bold, design: .rounded))
-                .minimumScaleFactor(0.5).lineLimit(1).monospacedDigit()
-                .accessibilityLabel("\(coach.workout.target)회 중 \(coach.reps)회")
-            ProgressView(value: Double(coach.reps), total: Double(coach.workout.target)).tint(.mint)
-            Text(coach.phase.rawValue).font(.headline)
+                .font(.subheadline)
+            let counterLayout = typeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 6))
+            counterLayout {
+                Text("\(coach.reps)")
+                    .lineLimit(1).minimumScaleFactor(0.4)
+                    .font(.system(size: repFontSize, weight: .bold, design: .rounded))
+                Text("/ \(coach.workout.target)회").font(.title3.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
+            .monospacedDigit()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("목표 \(coach.workout.target)회 중 \(coach.reps)회")
+            ProgressView(value: Double(coach.reps), total: Double(coach.workout.target))
+                .tint(MYMSStyle.lime)
             if coach.phase == .resting {
                 Text("남은 휴식 \(coach.restSeconds)초").monospacedDigit()
                 if coach.restInterrupted {
@@ -113,7 +190,7 @@ extension WorkoutHome {
                         .font(.footnote)
                 }
             }
-            if coach.phase == .paused {
+            if coach.phase == .paused && !coach.isSimulating {
                 Text("센서를 연결한 뒤 재개를 눌러주세요. 앱이 꺼져 있거나 센서 연결이 끊긴 동안의 동작은 집계되지 않습니다.")
                     .font(.footnote)
             }
@@ -121,50 +198,77 @@ extension WorkoutHome {
                 Text("동작 범위를 조금 더 늘려 보세요").foregroundStyle(.yellow)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
         .foregroundStyle(.white)
-        .background(Color(red: 0.05, green: 0.29, blue: 0.22), in: RoundedRectangle(cornerRadius: 24))
+        .background(MYMSStyle.ink, in: RoundedRectangle(cornerRadius: 24))
     }
 
     @ViewBuilder
     private var sessionResult: some View {
         if coach.phase == .finished, let summary = coach.summary {
             VStack(alignment: .leading, spacing: 8) {
-                Text(coach.isSimulating ? "시연 결과" : "운동 결과").font(.headline)
-                LabeledContent("유효 횟수", value: "\(summary.reps)회")
+                Text(summary.workout.exercise.rawValue).font(.title2.bold())
+                Text(summary.isSimulation ? "시연 결과" : "운동 결과").font(.subheadline).foregroundStyle(.secondary)
+                LabeledContent(summary.isSimulation ? "시연 횟수" : "유효 횟수", value: "\(summary.reps)회")
                 LabeledContent("완료 세트", value: "\(summary.sets) / \(summary.workout.sets)")
                 LabeledContent("경과 시간", value: "\(summary.seconds)초")
                 if let saved = store.records.first(where: { $0.id == summary.id }) {
                     LabeledContent("획득 포인트", value: "\(saved.points) P")
+                    Label(saved.isSimulation ? "시연 기록을 저장했습니다" : "운동 기록을 저장했습니다", systemImage: "checkmark.circle.fill")
+                        .font(.subheadline).foregroundStyle(.green)
+                    Button { tab = .history } label: { actionLabel("기록 보기", icon: "clock.arrow.circlepath") }
+                        .mymsPrimaryButton()
                 }
             }
             .padding(16)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .mymsCard()
         }
+    }
+
+    private func actionLabel(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 24)
     }
 
     private var sessionControls: some View {
         VStack(spacing: 12) {
-            if coach.isSimulating && coach.phase == .training {
-                Button("가상 동작 1회") { coach.simulateRep() }
-                    .disabled(coach.isSimulatingRep)
-            }
             switch coach.phase {
             case .ready, .finished:
-                Button("운동 시작") { coach.gesture(4) }.disabled(!coach.canMeasure || !store.loaded || !coach.canSelect)
+                Button { coach.gesture(4) } label: { actionLabel("운동 시작", icon: "play.fill") }
+                    .mymsPrimaryButton()
+                    .disabled(workoutStartIssue != nil)
+                if let issue = workoutStartIssue {
+                    Label(issue, systemImage: "info.circle")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             case .calibrating, .training:
-                Button("일시정지") { coach.pause() }
+                Button { coach.pause() } label: { actionLabel("일시정지", icon: "pause.fill") }
+                    .mymsPrimaryButton()
+                if coach.isSimulating && coach.phase == .training {
+                    Button { coach.simulateRep() } label: { actionLabel("가상 동작 1회", icon: "plus.circle") }
+                        .buttonStyle(.bordered)
+                        .disabled(coach.isSimulatingRep)
+                }
             case .paused:
-                Button("재개") { coach.gesture(4) }.disabled(!coach.canMeasure || !store.loaded)
-                Button("운동 종료") { coach.finish() }
+                Button { coach.gesture(4) } label: { actionLabel("운동 재개", icon: "play.fill") }
+                    .mymsPrimaryButton()
+                    .disabled(!coach.canMeasure || !store.loaded)
+                Button { coach.finish() } label: { actionLabel("운동 종료", icon: "stop.fill") }
+                    .buttonStyle(.bordered)
             case .resting:
                 if coach.restInterrupted {
-                    Button("남은 휴식 재개") { coach.resumeRest() }
+                    Button { coach.resumeRest() } label: { actionLabel("남은 휴식 재개", icon: "timer") }
+                        .mymsPrimaryButton()
                         .disabled(!coach.canMeasure || !store.loaded)
                 }
-                Button("다음 세트") { coach.gesture(1) }.disabled(!coach.canMeasure || !store.loaded)
-                Button("운동 종료") { coach.finish() }
+                Button { coach.gesture(1) } label: { actionLabel("다음 세트", icon: "forward.end.fill") }
+                    .mymsPrimaryButton()
+                    .disabled(!coach.canMeasure || !store.loaded)
+                Button { coach.finish() } label: { actionLabel("운동 종료", icon: "stop.fill") }
+                    .buttonStyle(.bordered)
             }
         }
         .buttonStyle(.borderedProminent)
@@ -199,15 +303,6 @@ private struct WorkoutCameraView: View {
                     .aspectRatio(4.0 / 3.0, contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(alignment: .topLeading) {
-                        Text(status)
-                            .font(.callout.bold())
-                            .foregroundStyle(.white)
-                            .padding(10)
-                            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
-                            .padding(10)
-                            .allowsHitTesting(false)
-                    }
                     .accessibilityLabel("카메라 미리보기")
             } else if failed {
                 ContentUnavailableView("카메라를 열 수 없어요", systemImage: "camera")
@@ -217,11 +312,12 @@ private struct WorkoutCameraView: View {
             } else if !checked {
                 ProgressView("카메라 준비 중")
             }
-            if authorized, !failed { Text(status).font(.headline) }
-            Text("iPad를 옆에 세우고 운동할 때 몸 전체가 화면에 들어오도록 위치를 맞추세요.")
-                .foregroundStyle(.secondary)
+            if authorized, !failed {
+                Label(status, systemImage: "viewfinder")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding()
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             let status = AVCaptureDevice.authorizationStatus(for: .video)
@@ -342,11 +438,11 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
             let status: String
             let visibleCount = landmarks.count
             if let analysisError {
-                status = "MoveNet Thunder 오류 · \(analysisError)"
+                status = "전신 추적 오류 · \(analysisError)"
             } else if visibleCount > 0 {
-                status = "Thunder · 관절 \(visibleCount)/17개 · \(milliseconds)ms"
+                status = "전신 관절 \(visibleCount) / 17개 감지"
             } else {
-                status = "Thunder · 전신 감지 대기 · 머리부터 발끝까지 보여 주세요"
+                status = "머리부터 발끝까지 화면에 맞춰 주세요"
             }
             let handStatus: String
             if let handError { handStatus = "손 추적 오류 · \(handError)" }

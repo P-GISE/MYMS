@@ -11,7 +11,8 @@ struct ExerciseGuide: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Image(systemName: plan.exercise.symbol).font(.title)
+                        Image(systemName: plan.exercise.symbol).font(.title).foregroundStyle(MYMSStyle.lime)
+                            .accessibilityHidden(true)
                         Text(plan.exercise.rawValue).font(.largeTitle.bold())
                         Text("\(plan.level.title) · \(plan.target)회 × \(plan.sets)세트 · 휴식 \(plan.rest)초")
                             .font(.subheadline)
@@ -19,7 +20,7 @@ struct ExerciseGuide: View {
                     .padding(.vertical, 8)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .listRowBackground(Color(red: 0.05, green: 0.29, blue: 0.22))
+                    .listRowBackground(MYMSStyle.ink)
                 }
                 Section("운동 방법") {
                     ExerciseAnimation(exercise: plan.exercise)
@@ -49,6 +50,8 @@ struct ExerciseGuide: View {
                     Text("시작 거리보다 센서에 해당 비율만큼 가까워졌다가, 시작 거리와의 차이가 \(plan.exercise.returnDepth.formatted(.percent)) 이하로 돌아오면 1회로 셉니다. 앱은 센서 거리로 횟수를 판정합니다.")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(MYMSStyle.canvas)
             .navigationTitle("운동 안내")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -57,8 +60,11 @@ struct ExerciseGuide: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Button("이 운동 준비하기", action: onSelect)
-                    .buttonStyle(.borderedProminent)
+                Button(action: onSelect) {
+                    Label("이 운동 선택", systemImage: "arrow.right").font(.headline)
+                        .frame(maxWidth: 480)
+                }
+                    .mymsPrimaryButton()
                     .controlSize(.large)
                     .disabled(!canSelect)
                     .frame(maxWidth: .infinity)
