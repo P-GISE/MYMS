@@ -8,8 +8,8 @@ extension WorkoutHome {
             GeometryReader { geometry in
                 let wide = geometry.size.width >= 760 && geometry.size.width > geometry.size.height && !typeSize.isAccessibilitySize
                 let previewHeight = wide
-                    ? max(100.0, geometry.size.height - 180)
-                    : max(80.0, geometry.size.height - workoutDetailsHeight - 240)
+                    ? max(100.0, geometry.size.height - 144)
+                    : max(80.0, geometry.size.height - workoutDetailsHeight - 204)
                 let inset: CGFloat = wide ? 28 : 16
                 let width = min(1400, max(0, geometry.size.width - inset * 2))
                 let controlsWidth: CGFloat = wide ? min(360, max(280, width * 0.31)) : width
@@ -281,12 +281,12 @@ private struct WorkoutCameraView: View {
     @State private var checked = false
     @State private var failed = false
 
-    @State private var status = "자세 확인 중"
+    @State private var trackingError: String?
 
     var body: some View {
         VStack(spacing: 16) {
             if authorized, scenePhase == .active, !failed {
-                WorkoutCameraPreview(onStatus: { status = $0 }) { failed = true }
+                WorkoutCameraPreview(onStatus: { trackingError = $0.contains("추적 오류") ? $0 : nil }) { failed = true }
                     .frame(height: previewHeight)
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -302,8 +302,8 @@ private struct WorkoutCameraView: View {
             } else if !checked {
                 ProgressView("카메라 준비 중")
             }
-            if authorized, !failed {
-                Label(status, systemImage: "viewfinder")
+            if authorized, !failed, let trackingError {
+                Label(trackingError, systemImage: "exclamationmark.triangle")
                     .font(.subheadline.weight(.medium))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

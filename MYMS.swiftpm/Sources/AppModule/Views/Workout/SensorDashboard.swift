@@ -242,20 +242,6 @@ struct SensorConnectionCard: View {
                 if let device = coach.selectedDevice {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(device.name).font(.subheadline.bold())
-                        if let hardwareID = coach.verifiedHardwareID {
-                            Text("아두이노 ID · \(hardwareID)")
-                                .font(.subheadline.monospaced()).textSelection(.enabled)
-                            Label("보드 고유 ID 읽기 완료", systemImage: "checkmark.circle")
-                                .font(.caption).foregroundStyle(.secondary)
-                        } else if let hardwareID = device.hardwareID {
-                            Text("아두이노 ID · \(hardwareID)")
-                                .font(.subheadline.monospaced()).textSelection(.enabled)
-                            Text("선택한 보드 ID · 연결 후 재확인")
-                                .font(.caption).foregroundStyle(.secondary)
-                        } else {
-                            Text("연결 후 보드 ID 확인")
-                                .font(.subheadline).foregroundStyle(.orange)
-                        }
                         if let received = coach.lastSensorDataAt {
                             TimelineView(.periodic(from: .now, by: 1)) { _ in
                                 (Text("마지막 유효 측정값 · ")
@@ -295,7 +281,7 @@ struct SensorConnectionCard: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .font(.footnote).foregroundStyle(.orange)
                 }
-                Text("처음 연결할 때는 아두이노 ID와 보드의 LED를 확인하세요.")
+                Text("보드가 여러 대라면 LED를 켜서 내 기기를 확인하세요.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -347,13 +333,6 @@ struct SensorConnectionCard: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(device.name).font(.headline).foregroundStyle(.primary)
-                                if let hardwareID = device.hardwareID {
-                                    Text("아두이노 ID · \(hardwareID)")
-                                        .font(.subheadline.monospaced()).foregroundStyle(.primary)
-                                } else {
-                                    Text("연결 후 보드 ID 확인")
-                                        .font(.caption).foregroundStyle(.orange)
-                                }
                                 Text("검색 시 신호 · \(device.rssi) dBm")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -364,7 +343,7 @@ struct SensorConnectionCard: View {
                         .disabled(!coach.canChooseDevice)
                     }
                 } footer: {
-                    Text("선택하면 보드 고유 ID를 직접 읽고, 광고 또는 이전에 확인한 ID와 비교합니다. 같은 이름이어도 ID를 확인하고, LED로 실물을 구분하세요.")
+                    Text("연결할 MYMS를 선택하세요. 같은 이름의 보드가 여러 대면 연결 후 LED로 구분할 수 있습니다.")
                 }
             }
             .navigationTitle("센서 선택")
