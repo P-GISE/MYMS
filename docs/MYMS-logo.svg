@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" role="img" aria-label="MYMS">
+  <rect width="240" height="64" rx="16" fill="#092F26"/>
+  <path d="M14 46 21 20 32 36 44 20 50 46" fill="none" stroke="#77F2BA" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="44" cy="20" r="4" fill="#fff"/>
+  <text x="65" y="45" fill="#fff" font-family="Arial, sans-serif" font-weight="800" font-size="35" letter-spacing="3">MYMS</text>
+</svg>

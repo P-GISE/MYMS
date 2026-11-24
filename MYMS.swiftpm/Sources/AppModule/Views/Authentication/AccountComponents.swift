@@ -63,8 +63,22 @@ struct AccountPage<Content: View>: View {
 
     private var introduction: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("MYMS", systemImage: "figure.strengthtraining.traditional")
-                .font(.headline.weight(.semibold))
+            HStack(spacing: 12) {
+                Canvas { context, _ in
+                    var mark = Path()
+                    mark.move(to: CGPoint(x: 3, y: 30))
+                    for point in [CGPoint(x: 10, y: 4), CGPoint(x: 21, y: 20),
+                                  CGPoint(x: 33, y: 4), CGPoint(x: 39, y: 30)] {
+                        mark.addLine(to: point)
+                    }
+                    context.stroke(mark, with: .color(Color(red: 0.47, green: 0.95, blue: 0.73)),
+                                   style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                    context.fill(Path(ellipseIn: CGRect(x: 29, y: 0, width: 8, height: 8)), with: .color(.white))
+                }
+                .frame(width: 42, height: 34)
+                .accessibilityHidden(true)
+                Text("MYMS").font(.title2.weight(.heavy)).tracking(2)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                 Text(subtitle)

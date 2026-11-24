@@ -9,7 +9,7 @@ extension WorkoutHome {
             GeometryReader { geometry in
                 let wide = geometry.size.width >= 780 && !typeSize.isAccessibilitySize
                 let inset: CGFloat = wide ? 28 : 16
-                let width = min(wide ? 960 : 540, max(0, geometry.size.width - inset * 2))
+                let width = min(wide ? 1120 : 620, max(0, geometry.size.width - inset * 2))
                 let panelWidth = wide ? (width - 20) / 2 : width
                 let layout = wide
                     ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
@@ -40,6 +40,8 @@ extension WorkoutHome {
             }
             if showsWorkoutCamera && tab == 1 {
                 WorkoutCameraView()
+                    .padding(12)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
             }
 
             Picker("측정 방식", selection: Binding(
@@ -208,8 +210,8 @@ private struct WorkoutCameraView: View {
             if authorized, scenePhase == .active, !failed {
                 WorkoutCameraPreview(position: position, onStatus: { status = $0 }) { failed = true }
                     .id(position)
+                    .aspectRatio(4.0 / 3.0, contentMode: .fit)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 260)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .accessibilityLabel("카메라 미리보기")
             } else if failed {
