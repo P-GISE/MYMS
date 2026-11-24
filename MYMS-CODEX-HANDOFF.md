@@ -1,0 +1,81 @@
+# MYMS — 새 Codex 계정 인수인계
+
+작성일: 2026-11-24 (한국 시간). 대화 전체의 작업 결정을 이어받기 위한 요약입니다.
+
+## 새 Codex에 줄 첫 요청
+
+이 파일을 읽고 MYMS 작업을 이어서 진행해줘. GitHub main을 먼저 확인해줘. 우선순위는 iPad 운동 탭의 실제 카메라 관절 추적과 홈 화면 아이콘 검증이야. 거리 센서는 도착 후 따로 연결·검증하고, DB 서버는 담당자와 협의하기 전 변경하지 말아줘. 설명은 한국어로 간결하게, 실기기에서 확인한 것과 소스 검사만 한 것을 구분해줘.
+
+## 프로젝트 위치와 작업 환경
+
+- GitHub: https://github.com/P-GISE/MYMS
+- 저장소: C:/코덱스/임베디드소프트웨어응용/MYMS
+- Windows 노트북으로 Arduino 빌드·업로드, iPad Swift Playground로 앱 실행. Windows에서는 Apple SDK/Swift 빌드와 iPad 화면 검증을 수행하지 못함.
+- iPad에서 열 프로젝트는 폴더 전체 MYMS.swiftpm. Xcode 프로젝트도 같은 소스를 사용함. 소스는 App, Models, Services, Views에 역할별로 분리됨.
+- 2026-11-24 확인한 GitHub main: 6f173370fa8e574fa05045983e572341cbe904b5
+- 현재 로컬 HEAD는 8431eea에 남아 있고 워킹트리가 수정 상태. 앞선 푸시는 원격 main 기반 별도 인덱스로 수행했으므로 로컬 git status의 M/??는 상당수가 이미 원격에 존재함. 기존 로컬 작업을 보존하고, 새 작업은 원격 main을 받아 별도 체크아웃에서 시작하는 것이 안전함. 현재 폴더에 reset/강제 덮어쓰기를 하지 말 것.
+- docs/DB-HANDOFF.md는 로컬 전달 문서. 아래에 핵심을 옮겼음. build/ 아래 검사 로그·ZIP은 GitHub에 없음. 이전 ZIP을 최신 카메라/아이콘 버전이라 가정하지 말고 원격 main의 프로젝트를 사용.
+
+## 앱과 사용자의 목표
+
+MYMS는 BLE 비접촉 운동 보조 앱. 푸시업, 스쿼트, 힙 브리지, 앉아서 무릎 들기를 지원. 보드는 바닥/테이블에 고정하는 형태이며 몸에 부착하는 방식은 사용자 요구와 다름.
+
+- 거리 모드: 거리 센서의 시작 자세를 보정한 후 운동별 깊이와 복귀 조건으로 1회를 집계. VL53L0X 없이 들어오는 0mm는 미측정. BLE 연결됨만으로 운동 집계가 가능하진 않음.
+- 내장 IMU 동작 테스트: 보드를 움직여 카운팅 흐름을 시험하는 모드. 고정 보드의 IMU로 사람의 운동을 셀 수 없음. 현재 IMU 테스트 기록은 서버 전송·포인트·실제 운동 통계에서 제외.
+- 환경 기록: APDS 밝기 원시값과 비교 기준, 중력 벡터로 보정한 상대 경사, 운동기구·장소·신발 수동 선택. 온습도·기압은 새 환경 기록에서 제외. 밝기는 lux가 아님. 경사 측정은 평평한 면에서 보정한 뒤 안정적으로 놓아야 함.
+- 운동 복구: 계정별 로컬 체크포인트와 고정 세션 UUID 사용. 종료·연결 단절 시 시간과 횟수 정지, 재접속 후 사용자가 명시적으로 재개. 완료 ID 장부와 같은 UUID로 중복 저장·포인트 재적립 방지. 기기간 서버 복구는 별도 과제.
+
+## Arduino 및 BLE
+
+- 보드: Nano 33 BLE Sense Rev2, Windows USB COM5 확인. 보드 ID는 DF89BBC07DB8FDD3.
+- 사용자가 에듀이노 VL53L0X V2 납땜 완료 버전을 주문했고 점퍼선은 이미 있음. 마지막 언급 시 아직 미도착. 상품 https://m.eduino.kr/product/detail.html?product_no=1117
+- 센서 도착 후 전원을 끄고 Nano 3.3V → 모듈 VIN, GND → GND, SDA → SDA, SCL → SCL 연결. 센서가 살아 있는 거리값을 보내는지 확인하고 네 운동의 실제 횟수를 각각 검증. 특히 스쿼트에서 발·바닥이 아니라 움직이는 신체 부위를 읽도록 배치 필요. 부품 번호 VL53L0CXV0DH/1 단품은 표면 실장 칩이라 사용자가 원하는 무납땜 연결에 맞지 않음.
+- Arduino/MYMS/MYMS.ino는 ToF 초기화 실패에도 BLE 광고를 시작함. 서비스 UUID 19B10000-E8F2-537E-4F6C-D104768A1214. 특성 접미 코드: 01 가속도, 02 근접, 03 LED, 04 거리(2바이트 LE mm), 05 제스처, 09 밝기, 0A 3축 가속도, 0B 보드 ID(ASCII 대문자 16진수 16자리). 세부 규격은 docs/BLE-PROTOCOL.md.
+- 앱은 사용자가 기기를 선택하고 보드 ID를 실제로 읽음. 광고 이름에 ID가 있으면 비교. 이전 정상 연결에서 읽은 ID도 같은 앱 인스턴스에서 재연결 시 비교. 광고 이름이 Windows에서 누락된 사례 있음. ID 일치는 보드 구분용. LED로 실물 확인 가능.
+- 연결·ID 확인·유효 데이터 수신을 구분. 연결 취소 완료 전에 같은 기기의 새 연결을 막고, 10초 지연 시 Bluetooth 재시작 안내. 검색 상태는 연결 상태와 별도로 표시.
+- Windows 동시 읽기/알림/LED 시간 초과는 ArduinoBLE가 활성 연결이 아닌 핸들의 완료 이벤트까지 전송 크레딧으로 계산한 패턴을 찾아 보정. 저장소의 Arduino/build-and-upload.ps1이 ArduinoBLE 2.1.1의 확인된 HCI.cpp 사본만 패치. 원본 설치 라이브러리는 수정하지 않음. Arduino IDE에서 기본 업로드하면 보정이 빠짐.
+- 업로드: 저장소 루트 PowerShell에서 아래 명령. 아두이노 코어 arduino:mbed_nano 4.6.0으로 검증.
+  ~~~powershell
+  .\Arduino\build-and-upload.ps1 -Upload -Port COM5
+  ~~~
+- 보정 펌웨어 실측: 동시 읽기/알림 3회 및 LED 반복 3회, 총 234회 읽기 성공. 후속 60초 테스트 358회 읽기 성공, 잘못된 LED 명령 2/255 거부 4건, 보드 ID 재연결 2회 성공. Windows 단일 BLE 연결 테스트이며 iPad 실행 결과는 별도.
+- iPad가 보드에 연결 중이면 Windows가 광고를 못 찾을 수 있음. iPad 연결을 유지한 상태에서는 COM5 시리얼로 수치를 확인할 수 있음. 마지막 확인에서 가속도 약 0.995g, 거리 0mm(센서 미연결), BLE YES.
+
+## iPad 카메라와 디자인
+
+- 운동 탭의 카메라 자세 보조 스위치로 같은 화면에 미리보기와 운동 진행 표시. 전면/후면 선택, AVFoundation 프레임과 Vision VNDetectHumanBodyPoseRequest로 한 사람의 관절을 점/선으로 표시. 영상은 기기에서 처리. 스위치를 끄거나 다른 탭·백그라운드로 이동하면 캡처 세션을 종료하도록 구현.
+- 운동 탭은 넓은 가로 화면에서 두 열, 좁은 화면 및 큰 글자에서 세로 배치. 로그인/회원가입에 워드마크 적용. 전체 탭의 디자인 개편은 아직 끝나지 않았음.
+- 사용자 실기기 보고: 자세 보조를 켰으나 트래킹이 보이지 않았음. 6f17337에서 미리보기 이미지의 고유 크기가 레이아웃에 영향을 주지 않도록 수정, 관절 점/선 강화, 일부 관절 수·감지 대기·다중 인물·Vision 분석 실패 안내 추가. 실제 원인이 해결됐는지는 최신 iPad 빌드에서 확인 필요.
+- 새 Codex는 iPad에서 영상 자체가 보이는지, 카메라 상태 문구와 감지 관절 개수, 전면/후면 및 회전 시 차이가 있는지부터 확인할 것. 최신 프로젝트에서 한 사람의 손목부터 발목이 보이도록 테스트.
+- 사용자 의미의 로고는 **홈 화면 앱 아이콘**. 6f17337에 1024×1024 RGB 아이콘 PNG를 추가하고 Swift Playground AppIcon 및 Xcode asset catalog로 등록. 실제 iPad 설치 후 홈 화면 확인은 미완료. PNG 위치 MYMS.swiftpm/Sources/AppModule/Assets.xcassets/AppIcon.appiconset/AppIcon.png. 기존 docs/MYMS-logo.svg는 별도 워드마크.
+- 카메라 자동 카운트는 아직 없음. 첫 후보로 옆 촬영 푸시업 1종의 굽힘→복귀 검증을 제안했지만, 자동 집계 범위는 아직 결정되지 않음.
+
+## Supabase DB 담당자와 협의할 내용
+
+- Arduino는 BLE 측정만 담당. iOS가 필요한 기록 형식으로 변환해 서버에 보냄.
+- 원격 GitHub에는 PR #3으로 완료 기록 환경/측정 방식/보드 ID 마이그레이션이 병합됐음. 파일 supabase/migrations/20261122063439_add_session_environment.sql. 운영 DB 적용 여부와 앱 전송 연동은 별도 확인.
+- 마이그레이션은 workout_sessions에 environment jsonb(객체), measurement_source text(tof/imu_test), arduino_id text(대문자 16진수 16자리)를 nullable로 추가. 로컬 Swift의 한국어 rawValue·camelCase 키를 서버 코드와 명시적으로 변환해야 함.
+- 환경 JSON 제안: brightness_raw, brightness_reference, incline_degrees, measured_at(ISO 8601), equipment, place, footwear. 미측정 값은 null/생략. 진행 중 운동은 별도 workout_progress 테이블 제안 단계. 세션 UUID, user_id, 운동 설정 스냅샷, 현재/누적 횟수와 세트, 경과 시간·남은 휴식, phase/status, started_at/updated_at, revision, 환경·측정 방식·보드 ID 필요.
+- 다른 iPad에서 복구하려면 서버에서 revision 충돌 처리, RLS, 동일 세션 UUID의 원자적 완료/포인트 처리, 종료된 체크포인트 재생성 방지가 필요함. 현재 서버 적용/복구 RPC 유무는 담당자 확인 대상.
+- 현재 앱의 INSERT는 user_id 기본값에 의존. 초기 마이그레이션엔 auth.uid()가 있으나 실제 DB에서 아래 읽기 전용 SQL로 확인 필요. RLS가 기본값을 대신 채우지 않음.
+
+~~~sql
+SELECT table_name, column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('workout_plans', 'workout_sessions')
+  AND column_name = 'user_id'
+ORDER BY table_name;
+~~~
+
+## 주요 GitHub 커밋
+
+- 80d8b96: Arduino 고유 ID 추가.
+- 064de44: 기기 선택·확인 표시·운동 복구.
+- f95c18b: 측정 중단 시 휴식/운동 시간 정지, 오프라인 로그아웃.
+- d7ec1b2: BLE 전송 크레딧 보정과 재현 가능한 빌드.
+- d7157f0: BLE 재연결 ID 유지, 연결 취소 순서와 검색 UI.
+- 0803403: 담당자 DB 완료기록 마이그레이션 병합.
+- ff41cf3: 운동 탭 카메라 자세 보조.
+- d97523c: 반응형 레이아웃과 워드마크.
+- 6f17337: 추적 표시 개선과 홈 화면 앱 아이콘.
