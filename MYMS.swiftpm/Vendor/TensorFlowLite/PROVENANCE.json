@@ -1,0 +1,11 @@
+{
+  "source": "https://github.com/google-ai-edge/LiteRT-Swift/tree/v2.4.0",
+  "source_revision": "690d0c294ece7e16f032fae6f447c6ec587d7dbc",
+  "binary_source": "https://github.com/google-ai-edge/LiteRT/releases/download/v2.4.0/TensorFlowLiteC.xcframework.zip",
+  "archive_sha256": "945a2b5d5ef9eea51f3d06d9ebe9087db4c31edcd36195de542465db8039db6a",
+  "static_library_sha256": {
+    "ios-arm64": "1f1549603d3718b8e94cebb7aa561d628745be60185c3808f528ad0283556e51",
+    "ios-arm64-simulator": "2f460257556e40c303e95547b2efb98a703262bd759d39f44168bac5fe0d9067"
+  },
+  "changes": "Static archives unchanged; XCFramework LibraryPath changed from .framework to .a, HeadersPath/module map added. CoreML/Metal delegates excluded, matching official SwiftPM product. Swift wrapper product is dynamic to isolate the runtime from MediaPipe; Xcode embeds and signs its framework."
+}

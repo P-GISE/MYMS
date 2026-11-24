@@ -4,6 +4,14 @@ import SwiftUI
 struct MYMSApp: App {
     @StateObject private var accounts = Accounts()
 
+    init() {
+        if ProcessInfo.processInfo.environment["MYMS_POSE_DIAGNOSTICS"] != "1" {
+            let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("MYMS-pose-diagnostic.json")
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             if let account = accounts.current {

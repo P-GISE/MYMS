@@ -24,6 +24,10 @@ final class Accounts: ObservableObject {
     private var token: String?
     private var refreshToken: String?
     private var refreshing: Task<CloudSession, Error>?
+    private var sessionRevision = UUID()
+    private let vault: TokenVault
+    private let preferences: UserDefaults
+    static let restoreDisabledKey = "myms.session.restoreDisabled"
 
     static let localAccountID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     var isLocalMode: Bool { current?.id == Self.localAccountID }
@@ -35,8 +39,15 @@ final class Accounts: ObservableObject {
         current = LocalAccount(id: Self.localAccountID, email: "이 기기에 저장", ageGroup: age)
     }
 
-    init() {
-        refreshToken = MYMSCloud.savedRefreshToken
+    init(vault: TokenVault = MYMSCloud.refreshVault, preferences: UserDefaults = .standard) {
+        self.vault = vault
+        self.preferences = preferences
+        if preferences.bool(forKey: Self.restoreDisabledKey) {
+            do { try vault.remove() } catch { message = error.localizedDescription }
+            return
+        }
+        do { refreshToken = try vault.read() }
+        catch { message = error.localizedDescription; return }
         guard refreshToken != nil else { return }
         restoring = true
         Task {
@@ -68,14 +79,19 @@ final class Accounts: ObservableObject {
                  prefer: String? = nil) async throws -> Data {
         guard let token else { throw URLError(.userAuthenticationRequired) }
         let accountID = current?.id
+        let revision = sessionRevision
         do {
-            return try await MYMSCloud.request(path, method: method, token: token, body: body, prefer: prefer)
+            let data = try await MYMSCloud.request(path, method: method, token: token, body: body, prefer: prefer)
+            guard sessionRevision == revision, current?.id == accountID else { throw URLError(.cancelled) }
+            return data
         } catch let error as MYMSCloud.RequestError where error.status == 401 {
-            guard current?.id == accountID else { throw URLError(.userAuthenticationRequired) }
+            guard sessionRevision == revision, current?.id == accountID else { throw URLError(.userAuthenticationRequired) }
             var fresh = self.token
             if fresh == token { fresh = try await refreshSession().access_token }
-            guard current?.id == accountID, let fresh else { throw error }
-            return try await MYMSCloud.request(path, method: method, token: fresh, body: body, prefer: prefer)
+            guard sessionRevision == revision, current?.id == accountID, let fresh else { throw error }
+            let data = try await MYMSCloud.request(path, method: method, token: fresh, body: body, prefer: prefer)
+            guard sessionRevision == revision, current?.id == accountID else { throw URLError(.cancelled) }
+            return data
         }
     }
 
@@ -90,17 +106,18 @@ final class Accounts: ObservableObject {
     private func refreshSession() async throws -> CloudSession {
         if let refreshing { return try await refreshing.value }
         guard let refreshToken else { throw URLError(.userAuthenticationRequired) }
+        let revision = sessionRevision
         let task = Task<CloudSession, Error> {
-            defer { refreshing = nil }
+            defer { if sessionRevision == revision { refreshing = nil } }
             do {
                 let data = try await MYMSCloud.request("/auth/v1/token?grant_type=refresh_token", method: "POST",
                                                        body: ["refresh_token": refreshToken])
                 let session = try JSONDecoder().decode(CloudSession.self, from: data)
-                guard self.refreshToken == refreshToken else { throw URLError(.cancelled) }
-                adopt(session)
+                guard self.sessionRevision == revision, self.refreshToken == refreshToken else { throw URLError(.cancelled) }
+                try adopt(session)
                 return session
             } catch let error as MYMSCloud.RequestError where [400, 401, 403].contains(error.status) {
-                if self.refreshToken == refreshToken {
+                if self.sessionRevision == revision, self.refreshToken == refreshToken {
                     endSession(message: "로그인이 만료되었습니다. 다시 로그인하세요.")
                 }
                 throw error
@@ -111,25 +128,33 @@ final class Accounts: ObservableObject {
     }
 
     private func open(_ session: CloudSession) async throws {
-        adopt(session)
+        try adopt(session)
         try await loadAccount(session.user)
     }
 
-    private func adopt(_ session: CloudSession) {
+    private func adopt(_ session: CloudSession) throws {
+        try vault.write(session.refresh_token)
+        preferences.set(false, forKey: Self.restoreDisabledKey)
         token = session.access_token
         refreshToken = session.refresh_token
-        MYMSCloud.savedRefreshToken = session.refresh_token
     }
 
     private func endSession(message: String? = nil) {
+        // Fail closed on the next launch even if Keychain deletion fails while the device locks.
+        preferences.set(true, forKey: Self.restoreDisabledKey)
+        sessionRevision = UUID()
         token = nil
         refreshToken = nil
-        MYMSCloud.savedRefreshToken = nil
+        refreshing?.cancel()
+        refreshing = nil
         current = nil
         self.message = message
+        do { try vault.remove() }
+        catch { self.message = "기기 로그인 정보 삭제에 실패했습니다: " + error.localizedDescription }
     }
 
     private func loadAccount(_ user: CloudUser) async throws {
+        let revision = sessionRevision
         let data = try await request("/rest/v1/profiles?id=eq.\(user.id.uuidString)&select=age_group")
         let rows = try JSONDecoder().decode([Profile].self, from: data)
         let code = rows.first?.age_group ?? (rows.isEmpty ? user.user_metadata?.age_group : nil)
@@ -138,6 +163,7 @@ final class Accounts: ObservableObject {
                                   body: ["id": user.id.uuidString, "age_group": code as Any? ?? NSNull()],
                                   prefer: "resolution=ignore-duplicates")
         }
+        guard sessionRevision == revision else { throw URLError(.cancelled) }
         current = LocalAccount(id: user.id, email: user.email ?? "", ageGroup: AgeGroup.allCases.first { $0.cloudCode == code })
     }
 

@@ -1,0 +1,10 @@
+{
+  "source": "https://raw.githubusercontent.com/google-ai-edge/mediapipe/3de79fc0209613c93c68adaff7917ecdad9f8ecb/Package.swift",
+  "version": "1.2.3",
+  "changes": "Vision/Common/TaskGraphs subset of official package; unchanged binary URLs/checksums and upstream privacy manifest. Excludes text/audio/retrieval/decision tasks. Retains official all_load registration flag.",
+  "archives": {
+    "MediaPipeTasksCommon": "39990d7ff26dedeef5e0f43e7a8656ead9219b52133ae390af5e9ffcfa208b1f",
+    "MediaPipeTaskGraphs": "706d2c894767e281ac5c02c27f1f4bba3c1f88b25a1a0ef51d134685ae30e05c",
+    "MediaPipeTasksVision": "5b420e4ce53681dbccc1b7ddcda3bd90a84d3e8c5f5b465abf02968d5155ceb1"
+  }
+}

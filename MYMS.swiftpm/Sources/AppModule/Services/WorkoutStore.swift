@@ -60,6 +60,11 @@ final class WorkoutStore: ObservableObject {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             plans = try values.decode([Workout].self, forKey: .plans)
             records = try values.decode([WorkoutRecord].self, forKey: .records)
+            guard plans.allSatisfy(\.isValid), records.allSatisfy(\.hasSafeStoredValues),
+                  Set(plans.map(\.id)).count == plans.count,
+                  Set(records.map(\.id)).count == records.count else {
+                throw DecodingError.dataCorruptedError(forKey: .records, in: values, debugDescription: "Invalid stored workout data")
+            }
             pending = try values.decodeIfPresent([Mutation].self, forKey: .pending) ?? []
             progress = try values.decodeIfPresent(WorkoutProgress.self, forKey: .progress)
             completedSessionIDs = (try values.decodeIfPresent(Set<UUID>.self, forKey: .completedSessionIDs) ?? [])
@@ -80,6 +85,9 @@ final class WorkoutStore: ObservableObject {
         do {
             let url = try Self.snapshotURL(for: accountID)
             if FileManager.default.fileExists(atPath: url.path) {
+                #if os(iOS)
+                try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: url.path)
+                #endif
                 let snapshot = try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: url))
                 plans = snapshot.plans
                 records = snapshot.records
@@ -101,17 +109,33 @@ final class WorkoutStore: ObservableObject {
 
     private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil,
                          prefer: String? = nil) async throws -> Data {
+        let scoped = try Self.ownerScopedRequest(path, method: method, body: body, accountID: accountID)
         if let accounts {
             guard accounts.current?.id == accountID, !accounts.isLocalMode else {
                 throw URLError(.userAuthenticationRequired)
             }
-            let data = try await accounts.request(path, method: method, body: body, prefer: prefer)
+            let data = try await accounts.request(scoped.path, method: method, body: scoped.body, prefer: prefer)
             guard accounts.current?.id == accountID, !accounts.isLocalMode else {
                 throw URLError(.userAuthenticationRequired)
             }
             return data
         }
-        return try await MYMSCloud.request(path, method: method, token: token, body: body, prefer: prefer)
+        return try await MYMSCloud.request(scoped.path, method: method, token: token, body: scoped.body, prefer: prefer)
+    }
+
+    static func ownerScopedRequest(_ path: String, method: String, body: [String: Any]?, accountID: UUID) throws -> (path: String, body: [String: Any]?) {
+        guard var parts = URLComponents(string: path), parts.scheme == nil, parts.host == nil, parts.fragment == nil,
+              ["/rest/v1/workout_plans", "/rest/v1/workout_sessions"].contains(parts.path),
+              ["GET", "POST", "PATCH", "DELETE"].contains(method) else { throw URLError(.badURL) }
+        var query = parts.queryItems ?? []
+        query.removeAll { $0.name == "user_id" }
+        query.append(URLQueryItem(name: "user_id", value: "eq." + accountID.uuidString))
+        parts.queryItems = query
+        var fields = body
+        if method == "POST" { fields?["user_id"] = accountID.uuidString }
+        else if fields?["user_id"] != nil { throw URLError(.badURL) }
+        guard let result = parts.string else { throw URLError(.badURL) }
+        return (result, fields)
     }
 
     static func namespace(for accountID: UUID) -> String {
@@ -136,7 +160,11 @@ final class WorkoutStore: ObservableObject {
         guard !unreadableSnapshot else { return false }
         do {
             let data = try JSONEncoder().encode(snapshot())
+            #if os(iOS)
+            try data.write(to: Self.snapshotURL(for: accountID), options: [.atomic, .completeFileProtection])
+            #else
             try data.write(to: Self.snapshotURL(for: accountID), options: .atomic)
+            #endif
             localError = nil
             return true
         } catch {
@@ -214,7 +242,10 @@ final class WorkoutStore: ObservableObject {
             if progress?.id == record.id { return transaction(changesHistory: false) { progress = nil } }
             return true
         }
-        guard progress == nil || progress?.id == record.id,
+        var boundedRecord = record
+        boundedRecord.points = min(record.points, 300)
+        guard boundedRecord.hasSafeStoredValues,
+              progress == nil || progress?.id == record.id,
               (1...100).contains(record.workout.target), (1...10).contains(record.workout.sets),
               (5...300).contains(record.workout.rest),
               (0...record.workout.sets).contains(record.sets),
@@ -301,6 +332,7 @@ final class WorkoutStore: ObservableObject {
 
     private func changedPlans(from previous: [Workout]) {
         transaction(previous: snapshot(plans: previous)) {
+            guard plans.allSatisfy(\.isValid), Set(plans.map(\.id)).count == plans.count else { throw URLError(.cannotDecodeContentData) }
             if cloudEnabled {
                 let oldByID = Dictionary(previous.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
                 for old in previous where !plans.contains(where: { $0.id == old.id }) {
@@ -321,6 +353,7 @@ final class WorkoutStore: ObservableObject {
     private func changedRecords(from previous: [WorkoutRecord]) {
         let before = snapshot(records: previous)
         transaction(previous: before) {
+            guard records.allSatisfy(\.hasSafeStoredValues), Set(records.map(\.id)).count == records.count else { throw URLError(.cannotDecodeContentData) }
             completedSessionIDs.formUnion(records.map(\.id))
             try enqueueRecordChanges(from: previous)
         }
@@ -369,8 +402,10 @@ final class WorkoutStore: ObservableObject {
         func workout() throws -> Workout {
             guard let exercise = Exercise.allCases.first(where: { $0.cloudCode == exercise_slug }),
                   let level = Level(rawValue: level) else { throw URLError(.cannotDecodeContentData) }
-            return Workout(id: id, exercise: exercise, level: level, target: target_reps,
-                           sets: target_sets, rest: rest_seconds)
+            let result = Workout(id: id, exercise: exercise, level: level, target: target_reps,
+                                 sets: target_sets, rest: rest_seconds)
+            guard result.isValid else { throw URLError(.cannotDecodeContentData) }
+            return result
         }
     }
 
@@ -407,8 +442,10 @@ final class WorkoutStore: ObservableObject {
                 date = formatter.date(from: finished_at)
             }
             guard let date else { throw URLError(.cannotDecodeContentData) }
-            return WorkoutRecord(id: plan.id, workout: try plan.workout(), date: date, reps: valid_reps,
-                                 sets: completed_sets, seconds: duration_seconds, note: note, points: points_earned)
+            let result = WorkoutRecord(id: plan.id, workout: try plan.workout(), date: date, reps: valid_reps,
+                                       sets: completed_sets, seconds: duration_seconds, note: note, points: points_earned)
+            guard result.hasSafeStoredValues else { throw URLError(.cannotDecodeContentData) }
+            return result
         }
     }
 }

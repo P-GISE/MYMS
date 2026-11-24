@@ -11,9 +11,35 @@ enum MYMSCloud {
         var errorDescription: String? { detail }
     }
 
-    static func request(_ path: String, method: String = "GET", token: String? = nil,
-                        body: [String: Any]? = nil, prefer: String? = nil) async throws -> Data {
-        var request = URLRequest(url: URL(string: url + path)!)
+    static let refreshVault = TokenVault(service: "edu.myms.fitness.session", account: "refresh_token")
+
+    static func isTrustedURL(_ candidate: URL?) -> Bool {
+        guard let candidate, let base = URL(string: url), candidate.scheme?.lowercased() == "https",
+              candidate.host?.lowercased() == base.host?.lowercased(), (candidate.port ?? 443) == 443,
+              candidate.user == nil, candidate.password == nil, candidate.fragment == nil else { return false }
+        return candidate.path.hasPrefix("/auth/v1/") || candidate.path.hasPrefix("/rest/v1/")
+    }
+
+    static func networkConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 20
+        configuration.timeoutIntervalForResource = 60
+        return configuration
+    }
+
+    private static let session = URLSession(configuration: networkConfiguration(), delegate: RedirectGuard(), delegateQueue: nil)
+
+    static func makeRequest(_ path: String, method: String = "GET", token: String? = nil,
+                            body: [String: Any]? = nil, prefer: String? = nil) throws -> URLRequest {
+        guard path.hasPrefix("/"), !path.hasPrefix("//"), !path.contains("\\"),
+              !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              let base = URL(string: url), let endpoint = URL(string: path, relativeTo: base)?.absoluteURL,
+              isTrustedURL(endpoint) else { throw URLError(.badURL) }
+        var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.setValue(key, forHTTPHeaderField: "apikey")
         if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
@@ -22,7 +48,13 @@ enum MYMSCloud {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        return request
+    }
+
+    static func request(_ path: String, method: String = "GET", token: String? = nil,
+                        body: [String: Any]? = nil, prefer: String? = nil) async throws -> Data {
+        let request = try makeRequest(path, method: method, token: token, body: body, prefer: prefer)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
             let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -32,30 +64,11 @@ enum MYMSCloud {
         return data
     }
 
-    private static let vault: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: "edu.myms.fitness.session",
-        kSecAttrAccount as String: "refresh_token"
-    ]
-
-    /// 앱을 다시 열어도 로그인이 유지되도록 Keychain에 보관하는 refresh token입니다.
-    static var savedRefreshToken: String? {
-        get {
-            var query = vault
-            query[kSecReturnData as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let data = item as? Data else { return nil }
-            return String(decoding: data, as: UTF8.self)
-        }
-        set {
-            SecItemDelete(vault as CFDictionary)
-            guard let newValue else { return }
-            var item = vault
-            item[kSecValueData as String] = Data(newValue.utf8)
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(item as CFDictionary, nil)
+    private final class RedirectGuard: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask,
+                        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                        completionHandler: @escaping (URLRequest?) -> Void) {
+            completionHandler(isTrustedURL(request.url) ? request : nil)
         }
     }
 }

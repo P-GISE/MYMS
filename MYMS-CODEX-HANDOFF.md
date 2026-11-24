@@ -43,6 +43,18 @@ MYMS는 BLE 비접촉 운동 보조 앱. 푸시업, 스쿼트, 힙 브리지, �
 
 ## iPad 카메라와 디자인
 
+### 2026-11-24 Mac 로컬 후속 작업
+
+아래 기존 Vision 기록 이후 사용자가 MoveNet Thunder 전신 추적 교체를 승인했습니다. 현재 로컬 코드는 TensorFlowLite + Thunder float16 v4로 17개 점을 추정합니다. 런타임은 `MYMS.swiftpm/Vendor/TensorFlowLite`의 출처/해시가 기록된 패키지이며 모델은 `PoseResources`에 포함됩니다. 얼굴 전용 대체 추적은 없습니다. 운동 탭은 카메라를 크게 표시하고 센서 연결/측정/시연 설정은 센서 탭으로 옮겼습니다.
+
+실제 iPad Air M2에서 XCTest 2건 통과, 기준 사진 17/17개 관절·약 25ms 추론 및 빈 화면에서 이전 점 제거를 확인했습니다. 실시간 사용자 동작 추적 정확도와 Swift Playground 빌드는 아직 별도 확인 대상입니다. 서버 변경·자동 카운트 구현은 하지 않았습니다. 이 후속 변경을 포함한 최신 상태는 GitHub main과 git log를 기준으로 확인하세요.
+
+양손 추적도 추가했습니다. MediaPipe Gesture Recognizer float16 v1이 손당 21개 점과 펼침/주먹을 분류하며 Thunder와 같은 프레임에 그립니다. 분류 점수 0.6 이상만 확정하고 나머지는 판별 중입니다. `Vendor/MediaPipeVision`은 공식 1.2.3 Vision/Common/TaskGraphs 바이너리 URL·해시 고정 패키지입니다. TensorFlowLite Swift wrapper는 동적 framework로 분리하고 Xcode Embed/Sign/Runpath를 설정했습니다. 카메라는 720p BGRA 입력입니다. 실제 iPad XCTest 4개 통과, 사용자 실시간 확인은 별도입니다.
+
+보안 점검 후 인증 요청을 HTTPS 지정 호스트/API로 제한하고 외부 리다이렉트/디스크 캐시/쿠키를 차단했습니다. TokenVault.swift가 WhenUnlockedThisDeviceOnly Keychain과 update-first 저장을 담당합니다. 로그아웃 복원 방지 표시·세션 세대 검사, 저장 파일 Complete 보호, 운동/기록 수치 검증, 명시적 user_id 필터·INSERT 소유자 고정, BLE 거리 0~2000mm 제한을 추가했습니다. 카메라 진단 파일은 MYMS_POSE_DIAGNOSTICS=1일 때만 생성하며 기본 시작에서 기존 파일을 제거합니다. 실제 iPad XCTest 9개 및 Mac 기록/복구/센서/손상 데이터 검사가 통과했습니다. 운영 DB는 바꾸지 않았고, 비로그인 읽기 거부만 확인했습니다. 서버 RLS 계정 간 격리·서버 점수 검증·BLE 암호학적 인증은 미확인/미구현 범위이며 docs/SECURITY-REVIEW.md에 정리했습니다.
+
+### 이전 구현 기록
+
 - 운동 탭의 카메라 자세 보조 스위치로 같은 화면에 미리보기와 운동 진행 표시. 전면/후면 선택, AVFoundation 프레임과 Vision VNDetectHumanBodyPoseRequest로 한 사람의 관절을 점/선으로 표시. 영상은 기기에서 처리. 스위치를 끄거나 다른 탭·백그라운드로 이동하면 캡처 세션을 종료하도록 구현.
 - 운동 탭은 넓은 가로 화면에서 두 열, 좁은 화면 및 큰 글자에서 세로 배치. 로그인/회원가입에 워드마크 적용. 전체 탭의 디자인 개편은 아직 끝나지 않았음.
 - 사용자 실기기 보고: 자세 보조를 켰으나 트래킹이 보이지 않았음. 6f17337에서 미리보기 이미지의 고유 크기가 레이아웃에 영향을 주지 않도록 수정, 관절 점/선 강화, 일부 관절 수·감지 대기·다중 인물·Vision 분석 실패 안내 추가. 실제 원인이 해결됐는지는 최신 iPad 빌드에서 확인 필요.

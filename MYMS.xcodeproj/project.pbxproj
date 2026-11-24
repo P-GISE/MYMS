@@ -3,9 +3,60 @@
  archiveVersion = 1;
  objectVersion = 56;
  objects = {
+  B50000000000000000000001 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Services/TokenVault.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B50000000000000000000002 = {isa = PBXBuildFile; fileRef = B50000000000000000000001; };
+  B50000000000000000000003 = {isa = PBXFileReference; path = Tests/CloudSecurityTests.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B50000000000000000000004 = {isa = PBXBuildFile; fileRef = B50000000000000000000003; };
+
+  B40000000000000000000001 = {isa = PBXBuildFile; productRef = E00000000000000000000402; settings = {ATTRIBUTES = (CodeSignOnCopy,RemoveHeadersOnCopy,); }; };
+  B40000000000000000000002 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 10; name = "Embed TensorFlowLite"; files = (B40000000000000000000001,); runOnlyForDeploymentPostprocessing = 0; };
+
+  B300000000000000000001001 = {isa = PBXFileReference; path = Tests/HandInferenceTests.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B300000000000000000002001 = {isa = PBXBuildFile; fileRef = B300000000000000000001001; };
+  B300000000000000000001002 = {isa = PBXFileReference; path = Tests/Fixtures/hand-fist.jpg; sourceTree = "<group>"; lastKnownFileType = image.jpeg; };
+  B300000000000000000002002 = {isa = PBXBuildFile; fileRef = B300000000000000000001002; };
+  B300000000000000000001003 = {isa = PBXFileReference; path = Tests/Fixtures/hand-open.jpg; sourceTree = "<group>"; lastKnownFileType = image.jpeg; };
+  B300000000000000000002003 = {isa = PBXBuildFile; fileRef = B300000000000000000001003; };
+  B200000000000000000001001 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Models/HandLandmarks.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B200000000000000000002001 = {isa = PBXBuildFile; fileRef = B200000000000000000001001; };
+  B200000000000000000001002 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Services/HandGestureEstimator.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B200000000000000000002002 = {isa = PBXBuildFile; fileRef = B200000000000000000001002; };
+  B200000000000000000001003 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Services/HandOverlay.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  B200000000000000000002003 = {isa = PBXBuildFile; fileRef = B200000000000000000001003; };
+  B10000000000000000000001 = {isa = XCLocalSwiftPackageReference; relativePath = MYMS.swiftpm/Vendor/MediaPipeVision; };
+  B10000000000000000000002 = {isa = XCSwiftPackageProductDependency; package = B10000000000000000000001; productName = MediaPipeTasksVision; };
+  B10000000000000000000003 = {isa = PBXBuildFile; productRef = B10000000000000000000002; };
+
+
+  F00000000000000000000001 = {isa = PBXNativeTarget; name = MYMSPoseTests; productName = MYMSPoseTests; productType = "com.apple.product-type.bundle.unit-test"; productReference = F00000000000000000000002; buildConfigurationList = F00000000000000000000003; buildPhases = (F00000000000000000000005,F00000000000000000000006,F00000000000000000000007,); dependencies = (F00000000000000000000009,); };
+  F00000000000000000000002 = {isa = PBXFileReference; path = MYMSPoseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; explicitFileType = wrapper.cfbundle; };
+  F00000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (F00000000000000000000004,); defaultConfigurationName = Debug; };
+  F00000000000000000000004 = {isa = XCBuildConfiguration; name = Debug; buildSettings = { PRODUCT_NAME = MYMSPoseTests; PRODUCT_BUNDLE_IDENTIFIER = edu.myms.fitness.tests; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_VERSION = 5.0; GENERATE_INFOPLIST_FILE = YES; CODE_SIGN_STYLE = Automatic; TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MYMS.app/MYMS"; BUNDLE_LOADER = "$(TEST_HOST)"; TEST_TARGET_NAME = MYMS; }; };
+  F00000000000000000000005 = {isa = PBXSourcesBuildPhase; files = (B50000000000000000000004,B300000000000000000002001,F00000000000000000000011,); };
+  F00000000000000000000006 = {isa = PBXResourcesBuildPhase; files = (B300000000000000000002003,B300000000000000000002002,F00000000000000000000013,); };
+  F00000000000000000000007 = {isa = PBXFrameworksBuildPhase; files = (); };
+  F00000000000000000000008 = {isa = PBXContainerItemProxy; containerPortal = A00000000000000000000001; proxyType = 1; remoteGlobalIDString = A00000000000000000000004; remoteInfo = MYMS; };
+  F00000000000000000000009 = {isa = PBXTargetDependency; target = A00000000000000000000004; targetProxy = F00000000000000000000008; };
+  F00000000000000000000010 = {isa = PBXFileReference; path = Tests/MoveNetInferenceTests.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  F00000000000000000000011 = {isa = PBXBuildFile; fileRef = F00000000000000000000010; };
+  F00000000000000000000012 = {isa = PBXFileReference; path = Tests/Fixtures/pose-person.jpeg; sourceTree = "<group>"; lastKnownFileType = image.jpeg; };
+  F00000000000000000000013 = {isa = PBXBuildFile; fileRef = F00000000000000000000012; };
+
+  E000000000000000000001001 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Models/PoseLandmarks.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  E000000000000000000002001 = {isa = PBXBuildFile; fileRef = E000000000000000000001001; };
+  E000000000000000000001002 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Services/PoseImageInput.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  E000000000000000000002002 = {isa = PBXBuildFile; fileRef = E000000000000000000001002; };
+  E000000000000000000001003 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Services/MoveNetPoseEstimator.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
+  E000000000000000000002003 = {isa = PBXBuildFile; fileRef = E000000000000000000001003; };
+  E00000000000000000000301 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/PoseResources; sourceTree = "<group>"; lastKnownFileType = folder; };
+  E00000000000000000000302 = {isa = PBXBuildFile; fileRef = E00000000000000000000301; };
+  E00000000000000000000401 = {isa = XCLocalSwiftPackageReference; relativePath = MYMS.swiftpm/Vendor/TensorFlowLite; };
+  E00000000000000000000402 = {isa = XCSwiftPackageProductDependency; package = E00000000000000000000401; productName = TensorFlowLite; };
+  E00000000000000000000403 = {isa = PBXBuildFile; productRef = E00000000000000000000402; };
+  E00000000000000000000404 = {isa = PBXFrameworksBuildPhase; files = (E00000000000000000000403,B10000000000000000000003,); };
   C00000000000000000000904 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Assets.xcassets; sourceTree = "<group>"; lastKnownFileType = folder.assetcatalog; };
   D00000000000000000000904 = {isa = PBXBuildFile; fileRef = C00000000000000000000904; };
-  A0000000000000000000000B = {isa = PBXResourcesBuildPhase; files = (D00000000000000000000904,); };
+  A0000000000000000000000B = {isa = PBXResourcesBuildPhase; files = (E00000000000000000000302,D00000000000000000000904,); };
   C00000000000000000000903 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Models/WorkoutProgress.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
   D00000000000000000000903 = {isa = PBXBuildFile; fileRef = C00000000000000000000903; };
   C00000000000000000000902 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Views/History/WorkoutStatisticsView.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
@@ -24,10 +75,10 @@
   B00000000000000000000307 = {isa = PBXGroup; name = Settings; children = (00000000000000000000010F,); sourceTree = "<group>"; };
   B00000000000000000000308 = {isa = PBXGroup; name = Shared; children = (000000000000000000000110,); sourceTree = "<group>"; };
   B00000000000000000000309 = {isa = PBXGroup; name = Workout; children = (C00000000000000000000901,000000000000000000000111,); sourceTree = "<group>"; };
-  A00000000000000000000001 = {isa = PBXProject; buildConfigurationList = A00000000000000000000002; compatibilityVersion = "Xcode 14.0"; mainGroup = A00000000000000000000003; targets = (A00000000000000000000004,); };
+  A00000000000000000000001 = {isa = PBXProject; buildConfigurationList = A00000000000000000000002; compatibilityVersion = "Xcode 14.0"; packageReferences = (E00000000000000000000401,B10000000000000000000001,); mainGroup = A00000000000000000000003; targets = (A00000000000000000000004,F00000000000000000000001,); };
   A00000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000005,); defaultConfigurationName = Debug; };
-  A00000000000000000000003 = {isa = PBXGroup; children = (C00000000000000000000904,B00000000000000000000300,B00000000000000000000301,B00000000000000000000302,B00000000000000000000303,A00000000000000000000007,); sourceTree = "<group>"; };
-  A00000000000000000000004 = {isa = PBXNativeTarget; name = MYMS; productName = MYMS; productType = "com.apple.product-type.application"; productReference = A00000000000000000000007; buildConfigurationList = A00000000000000000000008; buildPhases = (A00000000000000000000009,A0000000000000000000000B,); };
+  A00000000000000000000003 = {isa = PBXGroup; children = (B50000000000000000000001,B50000000000000000000003,B300000000000000000001003,B300000000000000000001002,B300000000000000000001001,B200000000000000000001003,B200000000000000000001002,B200000000000000000001001,F00000000000000000000010,F00000000000000000000012,F00000000000000000000002,E00000000000000000000301,E000000000000000000001003,E000000000000000000001002,E000000000000000000001001,C00000000000000000000904,B00000000000000000000300,B00000000000000000000301,B00000000000000000000302,B00000000000000000000303,A00000000000000000000007,); sourceTree = "<group>"; };
+  A00000000000000000000004 = {isa = PBXNativeTarget; name = MYMS; productName = MYMS; productType = "com.apple.product-type.application"; productReference = A00000000000000000000007; buildConfigurationList = A00000000000000000000008; packageProductDependencies = (E00000000000000000000402,B10000000000000000000002,); buildPhases = (A00000000000000000000009,A0000000000000000000000B,E00000000000000000000404,B40000000000000000000002,); };
   A00000000000000000000005 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {}; };
   000000000000000000000100 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/App/MYMSApp.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
   000000000000000000000101 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Models/Account.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
@@ -50,9 +101,9 @@
   000000000000000000000112 = {isa = PBXFileReference; path = MYMS.swiftpm/Sources/AppModule/Views/WorkoutHome.swift; sourceTree = "<group>"; lastKnownFileType = sourcecode.swift; };
   A00000000000000000000007 = {isa = PBXFileReference; path = MYMS.app; sourceTree = BUILT_PRODUCTS_DIR; explicitFileType = wrapper.application; };
   A00000000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000A,); defaultConfigurationName = Debug; };
-  A00000000000000000000009 = {isa = PBXSourcesBuildPhase; files = (D00000000000000000000903,D00000000000000000000902,D00000000000000000000901,D00000000000000000000900,000000000000000000000200,000000000000000000000201,000000000000000000000202,000000000000000000000203,000000000000000000000204,000000000000000000000205,000000000000000000000206,000000000000000000000207,000000000000000000000208,000000000000000000000209,00000000000000000000020A,00000000000000000000020B,00000000000000000000020C,00000000000000000000020D,00000000000000000000020E,00000000000000000000020F,000000000000000000000210,000000000000000000000211,000000000000000000000212,); };
+  A00000000000000000000009 = {isa = PBXSourcesBuildPhase; files = (B50000000000000000000002,B200000000000000000002003,B200000000000000000002002,B200000000000000000002001,E000000000000000000002003,E000000000000000000002002,E000000000000000000002001,D00000000000000000000903,D00000000000000000000902,D00000000000000000000901,D00000000000000000000900,000000000000000000000200,000000000000000000000201,000000000000000000000202,000000000000000000000203,000000000000000000000204,000000000000000000000205,000000000000000000000206,000000000000000000000207,000000000000000000000208,000000000000000000000209,00000000000000000000020A,00000000000000000000020B,00000000000000000000020C,00000000000000000000020D,00000000000000000000020E,00000000000000000000020F,000000000000000000000210,000000000000000000000211,000000000000000000000212,); };
   A0000000000000000000000A = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
-   ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; PRODUCT_NAME = MYMS; PRODUCT_BUNDLE_IDENTIFIER = edu.myms.fitness; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+   ENABLE_TESTABILITY = YES; LD_RUNPATH_SEARCH_PATHS = ("$(inherited)","@executable_path/Frameworks",); ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; PRODUCT_NAME = MYMS; PRODUCT_BUNDLE_IDENTIFIER = edu.myms.fitness; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
    IPHONEOS_DEPLOYMENT_TARGET = 17.0; TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_VERSION = 5.0;
    GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES;
    INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

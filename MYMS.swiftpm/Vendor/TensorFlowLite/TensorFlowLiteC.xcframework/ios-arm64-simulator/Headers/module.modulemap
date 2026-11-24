@@ -1,0 +1,4 @@
+module TensorFlowLiteC {
+  umbrella header "TensorFlowLiteC/TensorFlowLiteC.h"
+  export *
+}

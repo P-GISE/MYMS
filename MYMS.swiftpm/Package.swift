@@ -24,8 +24,12 @@ let package = Package(
             additionalInfoPlistContentFilePath: "AppInfo.plist"
         )
     ],
+    dependencies: [.package(path: "Vendor/TensorFlowLite"), .package(path: "Vendor/MediaPipeVision")],
     targets: [
-        .executableTarget(name: "AppModule", path: "Sources/AppModule")
+        .executableTarget(name: "AppModule",
+            dependencies: [.product(name: "TensorFlowLite", package: "TensorFlowLite"),
+                .product(name: "MediaPipeTasksVision", package: "MediaPipeVision")],
+            path: "Sources/AppModule", resources: [.copy("PoseResources")])
     ],
     swiftLanguageVersions: [.v5]
 )

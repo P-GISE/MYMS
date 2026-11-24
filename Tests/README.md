@@ -1,5 +1,25 @@
 # Swift 자체 검사
 
+## MoveNet Thunder 검사 (Mac / 실제 iPad)
+
+좌표 디코딩과 RGB 전처리는 Mac에서 실행합니다.
+
+```sh
+mkdir -p build/pose-validation
+swiftc MYMS.swiftpm/Sources/AppModule/Models/PoseLandmarks.swift Tests/PoseLandmarkChecks.swift -o build/pose-validation/pose-checks
+build/pose-validation/pose-checks
+swiftc MYMS.swiftpm/Sources/AppModule/Models/PoseLandmarks.swift MYMS.swiftpm/Sources/AppModule/Services/PoseImageInput.swift Tests/PoseImageChecks.swift -o build/pose-validation/image-checks
+build/pose-validation/image-checks
+```
+
+`MYMS` 공유 스킴에는 `MYMSPoseTests` XCTest 타깃이 포함됩니다. Xcode에서 연결된 iPad를 선택하고 Product → Test를 실행합니다. Command Line에서는 `xcodebuild -project MYMS.xcodeproj -scheme MYMS -destination 'id=<iPad 기기 ID>' -allowProvisioningUpdates DEVELOPMENT_TEAM=<개발 팀 ID> test`로 실행할 수 있습니다.
+
+기준 인물 사진으로 실제 모델 추론·얼굴/팔꿈치/손목/무릎 검출을 검사하고, 이어지는 빈 프레임에서 이전 점을 재사용하지 않는지 검사합니다. 2026-11-24 iPad Air 11인치(M2)에서 전신 검사 2개 통과, 기준 사진 17/17개 검출·추론 약 25ms를 확인했습니다. 이는 실시간 사용자의 카메라 추적 정확도를 대신하지 않습니다.
+
+실기기 수동 확인: 전면·후면, 가로·세로에서 머리부터 발끝까지 보이게 서서 양팔과 무릎을 움직입니다. 점이 영상의 같은 부위에 붙는지, 카메라 밖으로 나가면 점이 사라지는지 확인합니다. 다른 탭·백그라운드·카메라 끄기 후 캡처가 종료되는지도 확인합니다.
+
+## 기존 모델·기록 검사
+
 각 파일은 별도 실행 파일입니다. Swift Playground 앱 소스에는 포함하지 않습니다.
 Windows 환경에는 Swift/iOS SDK가 없어 아래 Swift 검사를 실행하지 못했습니다. Swift 5.9 이상이 있는 Mac에서 저장소 루트에서 실행합니다.
 
@@ -10,6 +30,7 @@ swiftc MYMS.swiftpm/Sources/AppModule/Models/SensorData.swift Tests/SensorDataCh
 
 swiftc -target "$(uname -m)-apple-macosx14.0" \
   MYMS.swiftpm/Sources/AppModule/Models/*.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/TokenVault.swift \
   MYMS.swiftpm/Sources/AppModule/Services/MYMSCloud.swift \
   MYMS.swiftpm/Sources/AppModule/Services/Accounts.swift \
   MYMS.swiftpm/Sources/AppModule/Services/WorkoutStore.swift \
@@ -19,6 +40,7 @@ swiftc -target "$(uname -m)-apple-macosx14.0" \
 
 swiftc -target "$(uname -m)-apple-macosx14.0" \
   MYMS.swiftpm/Sources/AppModule/Models/*.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/TokenVault.swift \
   MYMS.swiftpm/Sources/AppModule/Services/MYMSCloud.swift \
   MYMS.swiftpm/Sources/AppModule/Services/Accounts.swift \
   MYMS.swiftpm/Sources/AppModule/Services/WorkoutStore.swift \
@@ -77,3 +99,30 @@ Windows에서는 SwiftUI 빌드 및 실제 화면 검증을 수행하지 못했�
 BLE 잔여 오류 회귀 확인: 다른 기기에 연결된 상태로 기기 목록을 열어도 검색 진행 표시가 나와야 합니다. 연결/해제 중 선택 버튼은 동작 가능한 시점까지 비활성화됩니다. 연결 해제 직후 같은 기기에 재연결할 때 이전 종료 콜백이 새 연결을 끊으면 안 됩니다. 한 번 확인한 보드는 광고 이름이 없는 재검색에서도 같은 ID로 표시되고, 재연결에서 다른 ID를 읽으면 거부해야 합니다. 종료 콜백이 오지 않으면 10초 후 Bluetooth 재시작 안내를 표시합니다. 이 iPad 시나리오는 Windows에서 미실행입니다.
 
 `python Tests/ble/led_payload_check.py`는 실제 보드의 LED 0/1 설정과 잘못된 2/255 값 거부를 확인하고 원래 LED 상태로 복원합니다. 결과는 build/ble-debug/led-payload-check.json입니다.
+
+
+## 손 추적 검사
+
+`swiftc MYMS.swiftpm/Sources/AppModule/Models/HandLandmarks.swift Tests/HandLandmarkChecks.swift -o build/hand-checks && build/hand-checks`로 순수 상태 모델을 검사합니다.
+
+같은 MYMS Xcode 스킴의 HandInferenceTests가 양손 21개 점, Open_Palm/Closed_Fist 분류, 빈 프레임에서 제거, 중복 시간 거부, Thunder 동시 사용을 검사합니다. 2026-11-24 실제 iPad Air M2에서 전신 2건+손 2건, 총 4개 검사 통과를 확인했습니다. 기준 양손 이미지에서 두 손 각각 21점, 한 손 Open_Palm 약 0.604, 다른 손은 None(판별 중), 주먹 이미지에서 Closed_Fist 약 0.901이 나왔습니다. 모델 성능을 일반적인 정확도 비율로 해석하지 않습니다.
+
+실시간 확인: 카메라 자세 보조에서 양손을 펴고 쥐며 손가락 점과 상태가 바뀌는지, 손을 내리면 표시가 없어지는지 확인합니다. 전면·후면 및 회전에서도 점이 같은 영상 부위에 붙는지 확인합니다. 이 수동 검증은 자동 테스트 결과와 별개입니다.
+
+
+## 보안 회귀 검사
+
+MYMS 공유 스킴의 CloudSecurityTests는 외부 호스트/HTTP/잘못된 API 주소 차단, 캐시·쿠키 비활성화, 테스트 전용 Keychain의 ThisDeviceOnly/잠금 접근성, 토큰 갱신/삭제, 로그아웃 복원 차단, Complete 파일 보호를 검사합니다. 실제 사용자 토큰을 읽거나 서버 계정을 생성/탈퇴하지 않습니다. 전신·손 추적과 합쳐 실제 iPad에서 XCTest 9개 통과를 확인했습니다.
+
+```sh
+swiftc -target arm64-apple-macosx14.0 \
+  MYMS.swiftpm/Sources/AppModule/Models/*.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/TokenVault.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/MYMSCloud.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/Accounts.swift \
+  MYMS.swiftpm/Sources/AppModule/Services/WorkoutStore.swift \
+  Tests/StoredDataSecurityChecks.swift -o build/stored-security-checks
+./build/stored-security-checks
+```
+
+위 검사는 손상된 저장 데이터 거부·원본 보존·잘못된 편집 롤백·완료 기록의 안전한 범위·계정 요청 필터 및 대기열 API 제한을 확인합니다. 서버 RLS의 실제 계정 간 격리와 서버 점수 검증을 대체하지 않습니다. 자세한 범위와 미확인 사항은 `docs/SECURITY-REVIEW.md`를 참고하세요.

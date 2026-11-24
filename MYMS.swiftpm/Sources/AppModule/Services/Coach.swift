@@ -186,7 +186,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     var canSelect: Bool { (phase == .ready || phase == .finished) && recoveryCandidate == nil && sessionID == nil }
 
     func select(_ plan: Workout) {
-        guard canSelect else { return }
+        guard canSelect, plan.isValid else { return }
         workout = plan
         reps = 0
         set = 1
@@ -824,9 +824,9 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         guard error == nil, let data = characteristic.value else { return }
         let bytes = Array(data)
         if characteristic.uuid == distance {
-            guard !isSimulating, data.count == 2 else { return }
+            guard !isSimulating else { return }
             lastLiveSample = ProcessInfo.processInfo.systemUptime
-            let millimeters = Double(Int(bytes[0]) + Int(bytes[1]) * 256)
+            let millimeters = SensorPayload.distanceMillimeters(data) ?? 0
             if millimeters > 0 {
                 validDistanceAt = lastLiveSample
                 distanceDate = Date()

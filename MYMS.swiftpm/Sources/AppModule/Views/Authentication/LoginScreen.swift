@@ -42,6 +42,7 @@ struct LoginScreen: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .navigationBarTitleDisplayMode(.inline)
+            .onDisappear { password = "" }
         }
     }
 

@@ -3,6 +3,11 @@ import Foundation
 @main
 struct SensorDataChecks {
     static func main() {
+        assert(SensorPayload.distanceMillimeters(Data([0, 0])) == 0)
+        assert(SensorPayload.distanceMillimeters(Data([208, 7])) == 2000)
+        assert(SensorPayload.distanceMillimeters(Data([209, 7])) == nil)
+        assert(SensorPayload.distanceMillimeters(Data([255, 255])) == nil)
+        assert(SensorPayload.distanceMillimeters(Data([1])) == nil)
         // Given little-endian BLE data, when decoded, then values and invalid packets are distinguished.
         assert(SensorPayload.float32(Data([0, 0, 128, 63]), in: 0...32) == 1)
         assert(SensorPayload.float32(Data([0, 0, 192, 127]), in: 0...32) == nil)

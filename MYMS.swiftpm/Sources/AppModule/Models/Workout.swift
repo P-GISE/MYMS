@@ -90,6 +90,8 @@ struct Workout: Codable, Identifiable, Equatable {
     var sets = 3
     var rest = 30
 
+    var isValid: Bool { (1...100).contains(target) && (1...10).contains(sets) && (5...300).contains(rest) }
+
     var cloudFields: [String: Any] {
         ["exercise_slug": exercise.cloudCode, "level": level.rawValue, "target_reps": target,
          "target_sets": sets, "rest_seconds": rest]
@@ -107,4 +109,12 @@ struct WorkoutRecord: Codable, Identifiable {
     var points: Int
     var environment: SensorEnvironment? = nil
     var measurementSource: String? = nil
+
+    /// Bounds protect legacy history as well as server rows from overflow/corrupt values.
+    /// Completion performs the stricter per-workout rep/set consistency checks.
+    var hasSafeStoredValues: Bool {
+        workout.isValid && (0...1000).contains(reps) && (0...workout.sets).contains(sets)
+            && (0..<(Int.max / 2)).contains(seconds) && (0...300).contains(points)
+            && date.timeIntervalSinceReferenceDate.isFinite && (Date.distantPast...Date.distantFuture).contains(date)
+    }
 }

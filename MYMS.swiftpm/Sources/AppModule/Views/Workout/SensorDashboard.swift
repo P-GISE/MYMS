@@ -12,6 +12,29 @@ struct SensorDashboard: View {
                     Text("거리 센서 없이도 내장 센서를 확인할 수 있습니다.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("운동 측정 설정") {
+            Picker("측정 방식", selection: Binding(
+                get: { coach.measurementMode },
+                set: { coach.setMeasurementMode($0) }
+            )) {
+                ForEach(Coach.MeasurementMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .disabled(!coach.canSelect || coach.isSimulating)
+            if coach.measurementMode == .acceleration {
+                Text("보드를 손에 들고 움직여 코치 흐름을 시험합니다. 고정된 보드로 사람의 운동을 측정할 수 없으며, 이 기록에는 포인트가 적립되지 않습니다.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            if coach.canSelect || coach.isSimulating {
+                Toggle("센서 없이 시연", isOn: Binding(
+                    get: { coach.isSimulating },
+                    set: { coach.setSimulation($0) }
+                ))
+                .disabled(!coach.canSelect)
+            }
+
+                }
                 Section("IMU · 최근 10초") {
                     LabeledContent("가속도 크기", value: formatted(coach.acceleration, unit: "g"))
                     if coach.accelerationHistory.isEmpty {
@@ -74,7 +97,7 @@ struct SensorDashboard: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("내장 센서")
+            .navigationTitle("센서")
         }
     }
 

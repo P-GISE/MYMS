@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import Vision
 import CoreImage
 
 extension WorkoutHome {
@@ -9,105 +8,92 @@ extension WorkoutHome {
             GeometryReader { geometry in
                 let wide = geometry.size.width >= 780 && !typeSize.isAccessibilitySize
                 let inset: CGFloat = wide ? 28 : 16
-                let width = min(wide ? 1120 : 620, max(0, geometry.size.width - inset * 2))
-                let panelWidth = wide ? (width - 20) / 2 : width
-                let layout = wide
-                    ? AnyLayout(HStackLayout(alignment: .top, spacing: 20))
-                    : AnyLayout(VStackLayout(spacing: 16))
+                let width = min(1400, max(0, geometry.size.width - inset * 2))
+                let controlsWidth: CGFloat = wide ? min(340, width * 0.3) : width
 
                 ScrollView {
-                    layout {
-                        sensorPanel.frame(width: panelWidth)
-                        VStack(spacing: 16) {
-                            progressPanel
-                            sessionControls
-                            sessionResult
+                    if wide {
+                        HStack(alignment: .top, spacing: 24) {
+                            cameraPanel
+                                .frame(width: max(0, width - controlsWidth - 24))
+                            workoutDetails
+                                .frame(width: controlsWidth)
                         }
-                        .frame(width: panelWidth)
+                        .padding(inset)
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        VStack(spacing: 20) {
+                            cameraPanel
+                            workoutDetails
+                        }
+                        .frame(width: width)
+                        .padding(inset)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(inset)
-                    .frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle("운동")
         }
     }
 
-    private var sensorPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var cameraPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
             Toggle(isOn: $showsWorkoutCamera) {
-                Label("카메라 자세 보조", systemImage: "camera")
+                Label("카메라 자세 보조", systemImage: "figure.stand")
+                    .font(.title2.bold())
             }
             if showsWorkoutCamera && tab == 1 {
                 WorkoutCameraView()
-                    .padding(12)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            } else {
+                ContentUnavailableView("내 자세를 크게 확인하세요", systemImage: "camera",
+                    description: Text("카메라 자세 보조를 켜면 영상과 관절 표시를 확인할 수 있습니다."))
+                    .frame(maxWidth: .infinity, minHeight: 280)
             }
+        }
+        .padding(20)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24))
+    }
 
-            Picker("측정 방식", selection: Binding(
-                get: { coach.measurementMode },
-                set: { coach.setMeasurementMode($0) }
-            )) {
-                ForEach(Coach.MeasurementMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .disabled(!coach.canSelect || coach.isSimulating)
-            if coach.measurementMode == .acceleration {
-                Text("보드를 손에 들고 움직여 코치 흐름을 시험합니다. 고정된 보드로 사람의 운동을 측정할 수 없으며, 이 기록에는 포인트가 적립되지 않습니다.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            if coach.canSelect || coach.isSimulating {
-                Toggle("센서 없이 시연", isOn: Binding(
-                    get: { coach.isSimulating },
-                    set: { coach.setSimulation($0) }
-                ))
-                .disabled(!coach.canSelect)
-            }
+    private var workoutDetails: some View {
+        VStack(spacing: 16) {
+            progressPanel
+            sessionControls
+            measurementSummary
+            sessionResult
+        }
+    }
 
-            SensorConnectionCard(coach: coach)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("현재 측정값").font(.headline)
-                if !coach.isSimulating, coach.measurementMode == .acceleration {
+    private var measurementSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(coach.isSimulating ? "센서 없이 시연 중" : coach.measurementMode.rawValue,
+                  systemImage: "waveform.path.ecg")
+                .font(.headline)
+            if coach.isSimulating {
+                Text("시연 기록과 포인트는 저장되지 않습니다.")
+            } else {
+                Text(coach.connection)
+                if coach.measurementMode == .acceleration {
                     Text(coach.acceleration.map { "\($0.formatted(.number.precision(.fractionLength(2)))) g" } ?? "IMU 데이터 대기 중")
-                        .font(.title2.monospacedDigit())
-                } else if let millimeters = coach.latestDistance {
-                    Text("\((millimeters / 10).formatted(.number.precision(.fractionLength(1)))) cm")
-                        .font(.title2.monospacedDigit())
                 } else {
-                    Text(coach.connected ? "유효 거리값 대기 중" : "센서 데이터 대기 중")
-                        .foregroundStyle(.secondary)
+                    Text(coach.latestDistance.map { "\(($0 / 10).formatted(.number.precision(.fractionLength(1)))) cm" } ?? "유효 거리값 대기 중")
                 }
-                if coach.isSimulating {
-                    Text("시연 기록과 포인트는 저장되지 않습니다.")
-                        .foregroundStyle(.secondary)
-                } else if coach.canSelect && coach.measurementMode == .distance {
-                    Text(coach.workout.exercise.placement).foregroundStyle(.secondary)
-                } else if coach.phase == .training && coach.measurementMode == .distance && coach.latestDistance == nil {
-                    Text("측정 일시 중지").foregroundStyle(.orange)
+                if coach.canSelect && coach.measurementMode == .distance {
+                    Text(coach.workout.exercise.placement)
                 }
                 if coach.phase == .calibrating {
                     ProgressView(value: coach.calibrationProgress)
                         .accessibilityLabel("시작 거리 측정 진행률")
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("운동 환경").font(.headline)
-                LabeledContent("운동기구", value: coach.equipment.rawValue)
-                LabeledContent("장소", value: coach.place.rawValue)
-                LabeledContent("신발", value: coach.footwear.rawValue)
-                Text("센서 탭에서 밝기·바닥 경사를 측정하고 환경을 선택하세요. 보드를 바닥에 둔 상태로 운동 시작을 누르면 환경이 저장됩니다. IMU 동작 테스트는 그다음 보드를 들어 진행하세요.")
-                    .font(.footnote).foregroundStyle(.secondary)
+            Button { tab = 4 } label: {
+                Label("센서 연결 및 설정", systemImage: "arrow.right.circle")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .buttonStyle(.bordered)
         }
+        .font(.subheadline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private var progressPanel: some View {
@@ -213,6 +199,15 @@ private struct WorkoutCameraView: View {
                     .aspectRatio(4.0 / 3.0, contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(alignment: .topLeading) {
+                        Text(status)
+                            .font(.callout.bold())
+                            .foregroundStyle(.white)
+                            .padding(10)
+                            .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(10)
+                            .allowsHitTesting(false)
+                    }
                     .accessibilityLabel("카메라 미리보기")
             } else if failed {
                 ContentUnavailableView("카메라를 열 수 없어요", systemImage: "camera")
@@ -262,8 +257,12 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
         let output = AVCaptureVideoDataOutput()
         let queue = DispatchQueue(label: "MYMS.camera")
         let context = CIContext()
-        let request = VNDetectHumanBodyPoseRequest()
+        var estimator: MoveNetPoseEstimator?
+        var setupError: String?
+        var handEstimator: HandGestureEstimator?
+        var handSetupError: String?
         var lastFrame = -Double.infinity
+        var lastDiagnostic = -Double.infinity
         var onFrame: ((UIImage, String) -> Void)?
 
         func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer,
@@ -274,15 +273,30 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
             let frame = CIImage(cvPixelBuffer: buffer)
             guard let image = context.createCGImage(frame, from: frame.extent) else { return }
 
-            let detected = (try? VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up).perform([request])) != nil
-            typealias Joint = VNHumanBodyPoseObservation.JointName
-            var points: [Joint: VNRecognizedPoint] = [:]
-            if detected, let poses = request.results, poses.count == 1, let pose = poses.first,
-               let recognized = try? pose.recognizedPoints(.all) {
-                points = recognized.filter { $0.value.confidence >= 0.25 }
+            let started = CFAbsoluteTimeGetCurrent()
+            var landmarks: [PoseLandmark] = []
+            var analysisError: String?
+            if estimator == nil && setupError == nil {
+                do { estimator = try MoveNetPoseEstimator() }
+                catch { setupError = error.localizedDescription }
             }
-            let left: [Joint] = [.leftWrist, .leftElbow, .leftShoulder, .leftHip, .leftKnee, .leftAnkle]
-            let right: [Joint] = [.rightWrist, .rightElbow, .rightShoulder, .rightHip, .rightKnee, .rightAnkle]
+            do {
+                if let estimator { landmarks = try estimator.predict(image) }
+                else { analysisError = setupError }
+            } catch { analysisError = error.localizedDescription }
+            var hands: [TrackedHand] = []
+            var handError: String?
+            if handEstimator == nil && handSetupError == nil {
+                do { handEstimator = try HandGestureEstimator() }
+                catch { handSetupError = error.localizedDescription }
+            }
+            do {
+                if let handEstimator, time.isFinite, time >= 0, time < Double(Int.max / 1000) {
+                    hands = try handEstimator.predict(image, timestampMilliseconds: Int(time * 1000))
+                } else { handError = handSetupError ?? "카메라 시간 정보를 확인할 수 없습니다." }
+            } catch { handError = error.localizedDescription }
+            let milliseconds = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
+            let points = Dictionary(uniqueKeysWithValues: landmarks.map { ($0.joint, $0) })
             let size = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
@@ -294,41 +308,84 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 ctx.setFillColor(UIColor.systemGreen.cgColor)
                 ctx.setShadow(offset: .zero, blur: 5, color: UIColor.black.cgColor)
                 ctx.setLineWidth(6)
-                func location(_ joint: Joint) -> CGPoint? {
+                func location(_ joint: PoseJoint) -> CGPoint? {
                     guard let point = points[joint] else { return nil }
-                    return CGPoint(x: point.location.x * size.width, y: (1 - point.location.y) * size.height)
+                    return CGPoint(x: point.x * size.width, y: point.y * size.height)
                 }
-                for chain in [left, right, [.leftShoulder, .rightShoulder], [.leftHip, .rightHip]] {
-                    for (a, b) in zip(chain, chain.dropFirst()) {
-                        guard let start = location(a), let end = location(b) else { continue }
-                        ctx.move(to: start)
-                        ctx.addLine(to: end)
-                        ctx.strokePath()
+                for (a, b) in PoseJoint.connections {
+                    guard let start = location(a), let end = location(b) else { continue }
+                    ctx.move(to: start)
+                    ctx.addLine(to: end)
+                    ctx.strokePath()
+                }
+                let labeledJoints: Set<PoseJoint> = [.nose, .leftElbow, .rightElbow, .leftWrist, .rightWrist, .leftKnee, .rightKnee]
+                func drawDot(_ p: CGPoint, name: String?) {
+                    let dot = CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12)
+                    ctx.setFillColor(UIColor.systemYellow.cgColor)
+                    ctx.fillEllipse(in: dot)
+                    ctx.setStrokeColor(UIColor.black.cgColor)
+                    ctx.setLineWidth(2)
+                    ctx.strokeEllipse(in: dot)
+                    if let name {
+                        (name as NSString).draw(at: CGPoint(x: min(p.x + 10, size.width - 80), y: max(0, p.y - 22)),
+                            withAttributes: [.font: UIFont.boldSystemFont(ofSize: 17),
+                                .foregroundColor: UIColor.white, .strokeColor: UIColor.black, .strokeWidth: -3])
                     }
                 }
-                for joint in left + right {
+                for joint in PoseJoint.allCases {
                     guard let p = location(joint) else { continue }
-                    ctx.fillEllipse(in: CGRect(x: p.x - 7, y: p.y - 7, width: 14, height: 14))
+                    drawDot(p, name: labeledJoints.contains(joint) ? joint.title : nil)
                 }
+
+                HandOverlay.draw(hands, in: ctx, size: size)
             }
             let status: String
-            let visibleCount = (left + right).filter { points[$0] != nil }.count
-            if !detected {
-                status = "자세 분석에 실패했어요. 카메라를 다시 켜 주세요"
-            } else if (request.results?.count ?? 0) > 1 {
-                status = "한 사람만 화면에 들어오도록 해 주세요"
-            } else if left.allSatisfy({ points[$0] != nil }) || right.allSatisfy({ points[$0] != nil }) {
-                status = "자세 추적 중 · 관절 \(visibleCount)개"
+            let visibleCount = landmarks.count
+            if let analysisError {
+                status = "MoveNet Thunder 오류 · \(analysisError)"
             } else if visibleCount > 0 {
-                status = "관절 \(visibleCount)개 감지 · 손목부터 발목까지 보여 주세요"
+                status = "Thunder · 관절 \(visibleCount)/17개 · \(milliseconds)ms"
             } else {
-                status = "관절 감지 대기 · 밝은 곳에서 몸 전체를 보여 주세요"
+                status = "Thunder · 전신 감지 대기 · 머리부터 발끝까지 보여 주세요"
             }
-            onFrame?(annotated, status)
+            let handStatus: String
+            if let handError { handStatus = "손 추적 오류 · \(handError)" }
+            else if hands.isEmpty { handStatus = "손 감지 대기 · 손가락이 보이게 해 주세요" }
+            else { handStatus = "손 \(hands.count)개 · " + hands.map { $0.gesture.rawValue }.joined(separator: " / ") }
+            let combinedStatus = status + "\n" + handStatus
+            if ProcessInfo.processInfo.environment["MYMS_POSE_DIAGNOSTICS"] == "1", time - lastDiagnostic >= 1 {
+                lastDiagnostic = time
+                let diagnostic: [String: Any] = [
+                    "date": ISO8601DateFormatter().string(from: Date()),
+                    "engine": "MoveNet Thunder float16 v4",
+                    "frameWidth": image.width, "frameHeight": image.height,
+                    "rotation": connection.videoRotationAngle,
+                    "mirrored": connection.isVideoMirrored,
+                    "drawnJoints": visibleCount,
+                    "hands": hands.map { ["points": $0.visiblePoints.count, "gesture": $0.gesture.rawValue, "score": $0.score] as [String: Any] },
+                    "handError": handError ?? "",
+                    "joints": landmarks.map { ["name": $0.joint.title, "score": $0.score] as [String: Any] },
+                    "inferenceMilliseconds": milliseconds,
+                    "error": analysisError ?? "", "status": combinedStatus
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: diagnostic, options: [.prettyPrinted, .sortedKeys]) {
+                    let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                        .appendingPathComponent("MYMS-pose-diagnostic.json")
+                    try? data.write(to: url, options: [.atomic, .completeFileProtection])
+                }
+            }
+            onFrame?(annotated, combinedStatus)
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        if ProcessInfo.processInfo.environment["MYMS_POSE_DIAGNOSTICS"] != "1" {
+            let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("MYMS-pose-diagnostic.json")
+            try? FileManager.default.removeItem(at: url)
+        }
+        return Coordinator()
+    }
 
     func makeUIView(context: Context) -> Preview {
         let view = Preview()
@@ -364,11 +421,12 @@ private struct WorkoutCameraPreview: UIViewRepresentable {
                 return
             }
             camera.session.addInput(input)
-            if camera.session.canSetSessionPreset(.vga640x480) { camera.session.sessionPreset = .vga640x480 }
+            if camera.session.canSetSessionPreset(.hd1280x720) { camera.session.sessionPreset = .hd1280x720 }
             guard camera.session.canAddOutput(camera.output) else {
                 reportFailure()
                 return
             }
+            camera.output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
             camera.output.alwaysDiscardsLateVideoFrames = true
             camera.output.setSampleBufferDelegate(camera, queue: camera.queue)
             camera.session.addOutput(camera.output)

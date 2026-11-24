@@ -83,6 +83,13 @@ struct AccelerationSample: Identifiable {
 }
 
 enum SensorPayload {
+    static func distanceMillimeters(_ data: Data) -> Double? {
+        guard data.count == 2 else { return nil }
+        let bytes = Array(data)
+        let millimeters = Int(bytes[0]) | (Int(bytes[1]) << 8)
+        // Match the firmware's valid VL53L0X range; zero remains the no-measurement sentinel.
+        return millimeters <= 2000 ? Double(millimeters) : nil
+    }
     static func gravity(_ data: Data) -> GravityVector? {
         guard data.count == 12,
               let x = float32(Data(data.prefix(4)), in: -16...16),

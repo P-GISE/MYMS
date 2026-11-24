@@ -26,6 +26,7 @@ extension WorkoutHome {
             }
             .navigationTitle("설정")
             .sheet(isPresented: $confirmDeletion, onDismiss: {
+                deletionPassword = ""
                 if accounts.current != nil { accounts.message = nil }
             }) {
                 NavigationStack {
