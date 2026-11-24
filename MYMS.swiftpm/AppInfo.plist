@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSCameraUsageDescription</key>
+    <string>운동 자세가 화면에 들어오는지 확인하기 위해 카메라를 사용합니다.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>MYMS 운동 센서의 거리와 손 제스처를 받습니다.</string>
 </dict>

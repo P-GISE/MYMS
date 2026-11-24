@@ -55,6 +55,7 @@
    INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
    "INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad" = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
    INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "MYMS 운동 센서의 거리와 손 제스처를 받습니다.";
+   INFOPLIST_KEY_NSCameraUsageDescription = "운동 자세가 화면에 들어오는지 확인하기 위해 카메라를 사용합니다.";
    CODE_SIGN_STYLE = Automatic; ALWAYS_SEARCH_USER_PATHS = NO;
   }; };
   000000000000000000000200 = {isa = PBXBuildFile; fileRef = 000000000000000000000100; };

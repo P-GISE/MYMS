@@ -1,4 +1,7 @@
 import SwiftUI
+import AVFoundation
+import Vision
+import CoreImage
 
 extension WorkoutHome {
     var session: some View {
@@ -32,6 +35,13 @@ extension WorkoutHome {
 
     private var sensorPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: $showsWorkoutCamera) {
+                Label("카메라 자세 보조", systemImage: "camera")
+            }
+            if showsWorkoutCamera && tab == 1 {
+                WorkoutCameraView()
+            }
+
             Picker("측정 방식", selection: Binding(
                 get: { coach.measurementMode },
                 set: { coach.setMeasurementMode($0) }
@@ -172,5 +182,215 @@ extension WorkoutHome {
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(coach.persistenceError != nil)
+    }
+}
+
+private struct WorkoutCameraView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var authorized = false
+    @State private var checked = false
+    @State private var failed = false
+
+    @State private var position = AVCaptureDevice.Position.front
+    @State private var status = "자세 확인 중"
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Picker("카메라", selection: $position) {
+                Text("전면").tag(AVCaptureDevice.Position.front)
+                Text("후면").tag(AVCaptureDevice.Position.back)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: position) {
+                failed = false
+                status = "자세 확인 중"
+            }
+            if authorized, scenePhase == .active, !failed {
+                WorkoutCameraPreview(position: position, onStatus: { status = $0 }) { failed = true }
+                    .id(position)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 260)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .accessibilityLabel("카메라 미리보기")
+            } else if failed {
+                ContentUnavailableView("카메라를 열 수 없어요", systemImage: "camera")
+            } else if checked && !authorized {
+                ContentUnavailableView("카메라 권한이 필요해요", systemImage: "camera",
+                    description: Text("설정에서 MYMS의 카메라 접근을 허용해 주세요."))
+            } else if !checked {
+                ProgressView("카메라 준비 중")
+            }
+            if authorized, !failed { Text(status).font(.headline) }
+            Text("iPad를 옆에 세우고 운동할 때 몸 전체가 화면에 들어오도록 위치를 맞추세요.")
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            let status = AVCaptureDevice.authorizationStatus(for: .video)
+            let allowed: Bool
+            if status == .notDetermined {
+                allowed = await AVCaptureDevice.requestAccess(for: .video)
+            } else {
+                allowed = status == .authorized
+            }
+            guard !Task.isCancelled else { return }
+            authorized = allowed
+            checked = true
+        }
+    }
+}
+
+private struct WorkoutCameraPreview: UIViewRepresentable {
+    let position: AVCaptureDevice.Position
+    let onStatus: (String) -> Void
+    let onFailure: () -> Void
+
+    final class Preview: UIImageView {
+        var rotation: AVCaptureDevice.RotationCoordinator?
+        var observation: NSKeyValueObservation?
+        var active = true
+    }
+
+    final class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+        let session = AVCaptureSession()
+        let output = AVCaptureVideoDataOutput()
+        let queue = DispatchQueue(label: "MYMS.camera")
+        let context = CIContext()
+        let request = VNDetectHumanBodyPoseRequest()
+        var lastFrame = -Double.infinity
+        var onFrame: ((UIImage, String) -> Void)?
+
+        func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer,
+                           from connection: AVCaptureConnection) {
+            let time = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            guard time - lastFrame >= 0.12, let buffer = CMSampleBufferGetImageBuffer(sample) else { return }
+            lastFrame = time
+            let frame = CIImage(cvPixelBuffer: buffer)
+            guard let image = context.createCGImage(frame, from: frame.extent) else { return }
+
+            let detected = (try? VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up).perform([request])) != nil
+            typealias Joint = VNHumanBodyPoseObservation.JointName
+            var points: [Joint: VNRecognizedPoint] = [:]
+            if detected, let poses = request.results, poses.count == 1, let pose = poses.first,
+               let recognized = try? pose.recognizedPoints(.all) {
+                points = recognized.filter { $0.value.confidence >= 0.35 }
+            }
+            let left: [Joint] = [.leftWrist, .leftElbow, .leftShoulder, .leftHip, .leftKnee, .leftAnkle]
+            let right: [Joint] = [.rightWrist, .rightElbow, .rightShoulder, .rightHip, .rightKnee, .rightAnkle]
+            let size = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            format.opaque = true
+            let annotated = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
+                UIImage(cgImage: image).draw(in: CGRect(origin: .zero, size: size))
+                let ctx = renderer.cgContext
+                ctx.setStrokeColor(UIColor.systemGreen.cgColor)
+                ctx.setFillColor(UIColor.systemGreen.cgColor)
+                ctx.setLineWidth(3)
+                func location(_ joint: Joint) -> CGPoint? {
+                    guard let point = points[joint] else { return nil }
+                    return CGPoint(x: point.location.x * size.width, y: (1 - point.location.y) * size.height)
+                }
+                for chain in [left, right, [.leftShoulder, .rightShoulder], [.leftHip, .rightHip]] {
+                    for (a, b) in zip(chain, chain.dropFirst()) {
+                        guard let start = location(a), let end = location(b) else { continue }
+                        ctx.move(to: start)
+                        ctx.addLine(to: end)
+                        ctx.strokePath()
+                    }
+                }
+                for joint in left + right {
+                    guard let p = location(joint) else { continue }
+                    ctx.fillEllipse(in: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+                }
+            }
+            let status: String
+            if detected, (request.results?.count ?? 0) > 1 {
+                status = "한 사람만 화면에 들어오도록 해 주세요"
+            } else if left.allSatisfy({ points[$0] != nil }) || right.allSatisfy({ points[$0] != nil }) {
+                status = "측면 자세를 추적하고 있어요"
+            } else {
+                status = "어깨부터 발목까지 화면에 들어오도록 위치를 조정해 주세요"
+            }
+            onFrame?(annotated, status)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> Preview {
+        let view = Preview()
+        view.contentMode = .scaleAspectFit
+        view.backgroundColor = .black
+        let camera = context.coordinator
+        let reportFailure = { [weak view] in
+            DispatchQueue.main.async {
+                guard view?.active == true else { return }
+                onFailure()
+            }
+        }
+        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) else {
+            reportFailure()
+            return view
+        }
+        let rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+        view.rotation = rotation
+        view.observation = rotation.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.new]) { coordinator, _ in
+            let angle = coordinator.videoRotationAngleForHorizonLevelCapture
+            camera.queue.async {
+                if let connection = camera.output.connection(with: .video),
+                   connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+            }
+        }
+        let initialAngle = rotation.videoRotationAngleForHorizonLevelCapture
+        camera.queue.async {
+            guard let input = try? AVCaptureDeviceInput(device: device),
+                  camera.session.canAddInput(input) else {
+                reportFailure()
+                return
+            }
+            camera.session.addInput(input)
+            if camera.session.canSetSessionPreset(.vga640x480) { camera.session.sessionPreset = .vga640x480 }
+            guard camera.session.canAddOutput(camera.output) else {
+                reportFailure()
+                return
+            }
+            camera.output.alwaysDiscardsLateVideoFrames = true
+            camera.output.setSampleBufferDelegate(camera, queue: camera.queue)
+            camera.session.addOutput(camera.output)
+            if let connection = camera.output.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(initialAngle) {
+                    connection.videoRotationAngle = initialAngle
+                }
+                if connection.isVideoMirroringSupported {
+                    connection.automaticallyAdjustsVideoMirroring = false
+                    connection.isVideoMirrored = position == .front
+                }
+            }
+            camera.onFrame = { [weak view] image, status in
+                DispatchQueue.main.async {
+                    guard let view, view.active else { return }
+                    view.image = image
+                    onStatus(status)
+                }
+            }
+            camera.session.startRunning()
+            if !camera.session.isRunning { reportFailure() }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: Preview, context: Context) {}
+
+    static func dismantleUIView(_ uiView: Preview, coordinator: Coordinator) {
+        uiView.active = false
+        uiView.observation?.invalidate()
+        coordinator.queue.async {
+            coordinator.output.setSampleBufferDelegate(nil, queue: nil)
+            coordinator.session.stopRunning()
+        }
     }
 }

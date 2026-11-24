@@ -18,6 +18,7 @@ struct WorkoutHome: View {
         _store = StateObject(wrappedValue: WorkoutStore(accountID: account.id, accounts: accounts))
     }
     @State var tab = 0
+    @State var showsWorkoutCamera = false
     @State var editing: Workout?
     @State var guide: Workout?
     @State var deleting: Workout?
