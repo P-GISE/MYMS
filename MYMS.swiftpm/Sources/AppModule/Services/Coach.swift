@@ -121,6 +121,20 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
     private var simulationTimer: Timer?
     private var simulationSample = 0
     private var lastLiveSample: TimeInterval?
+    private var distanceGap = DistanceGap()
+
+    struct DistanceGap {
+        private var consecutiveZeros = 0
+
+        mutating func shouldProcess(_ millimeters: Double) -> Bool {
+            if millimeters > 0 {
+                consecutiveZeros = 0
+                return true
+            }
+            consecutiveZeros = min(consecutiveZeros + 1, 3)
+            return consecutiveZeros == 3
+        }
+    }
     private var distanceTimer: Timer?
 
     var canMeasure: Bool {
@@ -423,7 +437,10 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             if !self.isSimulating, let last = self.lastLiveSample,
                ProcessInfo.processInfo.systemUptime - last > 1 {
                 self.lastLiveSample = nil
+                self.validDistanceAt = nil
+                self.distanceGap = DistanceGap()
                 self.measure(0)
+                self.updateConnectionStatus()
                 if self.measurementMode == .distance { self.pauseForConnectionLoss() }
             }
         }
@@ -857,6 +874,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
             guard !isSimulating else { return }
             lastLiveSample = ProcessInfo.processInfo.systemUptime
             let millimeters = SensorPayload.distanceMillimeters(data) ?? 0
+            guard distanceGap.shouldProcess(millimeters) else { return }
             if millimeters > 0 {
                 validDistanceAt = lastLiveSample
                 distanceDate = Date()
@@ -966,6 +984,7 @@ final class Coach: NSObject, ObservableObject, CBCentralManagerDelegate, CBPerip
         isCalibratingFloor = false
         receivedAt.removeAll()
         lastLiveSample = nil
+        distanceGap = DistanceGap()
         validDistanceAt = nil
         validAccelerationAt = nil
         distanceDate = nil

@@ -21,6 +21,13 @@ struct ConnectionStatusChecks {
         assert(!Coach.matchesHardwareID(other, advertised: nil, remembered: first))
         assert(!Coach.matchesHardwareID(first, advertised: other, remembered: first))
         assert(Coach.matchesHardwareID(first, advertised: nil, remembered: nil))
+        var gap = Coach.DistanceGap()
+        for (distance, expected) in [(300.0, true), (0, false), (180, true),
+                                     (0, false), (0, false), (300, true),
+                                     (0, false), (0, false), (0, true), (0, true),
+                                     (300, true), (0, false)] {
+            assert(gap.shouldProcess(distance) == expected)
+        }
         print("ConnectionStatusChecks passed")
     }
 }
