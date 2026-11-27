@@ -10,11 +10,9 @@ extension WorkoutHome {
                         .listRowBackground(Color.clear)
                 }
                 Section {
-                    AgeGroupPicker(selection: Binding(
-                        get: { accounts.current?.ageGroup },
-                        set: { accounts.updateAgeGroup($0) }
-                    ))
-                    .disabled(accounts.busy)
+                    AgeGroupSetting(ageGroup: accounts.current?.ageGroup) { accounts.updateAgeGroup($0) }
+                        .equatable()
+                        .disabled(accounts.busy)
                     if accounts.busy && !confirmDeletion {
                         ProgressView("계정 정보 저장 중")
                     }
@@ -121,5 +119,18 @@ extension WorkoutHome {
             }
             .interactiveDismissDisabled(accounts.busy)
         }
+    }
+}
+
+// The settings tab re-renders about ten times a second while a sensor or simulation is active.
+// A menu rebuilt that often never registers a tap, so this view re-renders only when the age group changes.
+private struct AgeGroupSetting: View, Equatable {
+    let ageGroup: AgeGroup?
+    let onChange: (AgeGroup?) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.ageGroup == rhs.ageGroup }
+
+    var body: some View {
+        AgeGroupPicker(selection: Binding(get: { ageGroup }, set: onChange))
     }
 }

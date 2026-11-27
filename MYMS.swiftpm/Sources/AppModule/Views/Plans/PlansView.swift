@@ -52,14 +52,15 @@ extension WorkoutHome {
                     prepare(plan)
                 }
             }
-            .sheet(item: $editing) { plan in
-                PlanEditor(plan: plan, ageGroup: account.ageGroup) { updated in
+            .background {
+                PlanEditorSheet(editing: $editing, ageGroup: account.ageGroup) { updated in
                     if let index = store.plans.firstIndex(where: { $0.id == updated.id }) {
                         store.plans[index] = updated
                     } else {
                         store.plans.append(updated)
                     }
                 }
+                .equatable()
             }
             .confirmationDialog("운동 계획을 삭제할까요?", isPresented: Binding(
                 get: { deleting != nil }, set: { if !$0 { deleting = nil } }
@@ -182,4 +183,23 @@ extension WorkoutHome {
         tab = .workout
     }
 
+}
+
+// The plans tab re-renders about ten times a second while a sensor or simulation is active, and each pass rebuilt
+// the editor inside its sheet, so its open picker menus never registered a tap.
+// Presenting from a view that skips those passes leaves the editor alone until the edited plan changes.
+private struct PlanEditorSheet: View, Equatable {
+    @Binding var editing: Workout?
+    let ageGroup: AgeGroup?
+    let onSave: (Workout) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.editing == rhs.editing && lhs.ageGroup == rhs.ageGroup
+    }
+
+    var body: some View {
+        Color.clear.sheet(item: $editing) { plan in
+            PlanEditor(plan: plan, ageGroup: ageGroup, onSave: onSave)
+        }
+    }
 }
