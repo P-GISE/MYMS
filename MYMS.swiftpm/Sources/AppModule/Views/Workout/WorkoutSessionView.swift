@@ -104,21 +104,9 @@ extension WorkoutHome {
             } else {
                 Text(coach.hasSelectedWorkout ? "선택한 운동" : "운동할 계획을 선택하세요")
                     .font(.headline)
-                Picker("운동 선택", selection: Binding<UUID?>(
-                    get: { coach.selectedWorkoutID },
-                    set: { id in
-                        guard let id, let plan = store.plans.first(where: { $0.id == id }) else { return }
-                        coach.select(plan)
-                    }
-                )) {
-                    Text("선택하세요").tag(nil as UUID?).disabled(true)
-                    ForEach(store.plans) { plan in
-                        Text("\(plan.exercise.rawValue) · \(plan.target)회 × \(plan.sets)세트")
-                            .tag(Optional(plan.id))
-                    }
-                }
-                .pickerStyle(.menu)
-                .disabled(!coach.canSelect)
+                WorkoutPlanPicker(plans: store.plans, selectedID: coach.selectedWorkoutID,
+                                  isEnabled: coach.canSelect) { coach.select($0) }
+                    .equatable()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -264,6 +252,37 @@ extension WorkoutHome {
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(coach.persistenceError != nil)
+    }
+}
+
+// Coach publishes measurements about ten times a second while a sensor or simulation is active.
+// A menu rebuilt on every publish never registers a tap, so this view re-renders only when its inputs change.
+private struct WorkoutPlanPicker: View, Equatable {
+    let plans: [Workout]
+    let selectedID: UUID?
+    let isEnabled: Bool
+    let onSelect: (Workout) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.plans == rhs.plans && lhs.selectedID == rhs.selectedID && lhs.isEnabled == rhs.isEnabled
+    }
+
+    var body: some View {
+        Picker("운동 선택", selection: Binding<UUID?>(
+            get: { selectedID },
+            set: { id in
+                guard let plan = plans.first(where: { $0.id == id }) else { return }
+                onSelect(plan)
+            }
+        )) {
+            Text("선택하세요").tag(nil as UUID?).disabled(true)
+            ForEach(plans) { plan in
+                Text("\(plan.exercise.rawValue) · \(plan.target)회 × \(plan.sets)세트")
+                    .tag(Optional(plan.id))
+            }
+        }
+        .pickerStyle(.menu)
+        .disabled(!isEnabled)
     }
 }
 
