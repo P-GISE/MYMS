@@ -28,8 +28,10 @@ struct PlanEditor: View {
             Form {
                 Section("운동") {
                     Picker("종류", selection: $plan.exercise) {
+                        // Text only: with an icon in the items, the open menu ignores taps while a sensor or
+                        // simulation makes Coach re-render the app ten times a second.
                         ForEach(Exercise.allCases, id: \.self) { exercise in
-                            Label(exercise.rawValue, systemImage: exercise.symbol).tag(exercise)
+                            Text(exercise.rawValue).tag(exercise)
                         }
                     }
                     Picker("난이도", selection: $plan.level) {
